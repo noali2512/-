@@ -10,7 +10,7 @@
 
   var S = {
     tab: "gantt", edit: false, canEdit: false, dl: null, sel: null,
-    q: "", owner: "", filter: "all", zoom: 84, collapsed: {}, dirty: false, saving: false
+    q: "", owner: "", filter: "all", zoom: 84, collapsed: {}, dirty: false, saving: false, rp: "daily", rpDate: ""
   };
   try { var pref = JSON.parse(localStorage.getItem("pmo-pref") || "{}"); if (pref.zoom) S.zoom = pref.zoom; if (pref.collapsed) S.collapsed = pref.collapsed; if (pref.tab) S.tab = pref.tab; } catch (e) {}
   function savePref() { try { localStorage.setItem("pmo-pref", JSON.stringify({ zoom: S.zoom, collapsed: S.collapsed, tab: S.tab })); } catch (e) {} }
@@ -141,8 +141,8 @@
     if (S.canEdit) h += '<button class="btn ' + (S.edit ? "on" : "") + '" data-a="toggle-edit" aria-pressed="' + S.edit + '">' + (S.edit ? "סיום עריכה" : "מצב עריכה") + '</button>';
     h += '</div></header>';
     if (S.edit) {
-      h += '<div class="editbar"><span class="msg">' + (S.dirty ? "יש שינויים שטרם פורסמו. הלקוח יראה אותם רק אחרי פרסום." : "מצב עריכה פעיל. לחיצה על משימה פותחת את טופס העדכון.") + '</span>' +
-        '<button class="btn sm" data-a="add-root">+ משימת על</button>' +
+      h += '<div class="editbar"><span class="msg">' + (S.dirty ? "יש שינויים שטרם פורסמו. הלקוח יראה אותם רק אחרי פרסום." : "מצב עריכה: אפשר לעדכן שם, אחראי, תאריכים וסטטוס ישירות בטבלה. לחיצה על מספר ה-WBS פותחת את כל השדות.") + '</span>' +
+        '<button class="btn sm" data-a="project">פרטי פרויקט ואבני דרך</button><button class="btn sm" data-a="add-root">+ משימת על</button>' +
         (S.dirty ? '<button class="btn sm" data-a="discard">ביטול שינויים</button>' : '') +
         '<button class="btn primary sm" data-a="save" ' + (!S.dirty || S.saving ? "disabled" : "") + '>' + (S.saving ? "מפרסם…" : "פרסום השינויים") + '</button></div>';
     }
@@ -155,7 +155,7 @@
       kpi("Go-Live צפוי", glDate != null ? fmy(glDate) : "—", '<span class="note">' + (gl ? (glDelta > 0 ? "דחייה של " + glDelta + " ימים" : "לפי התוכנית") : "") + '</span>', glDelta > 0 ? "bad" : "") +
       '</section>';
     h += '<div class="bar-row"><div class="tabs" role="tablist">' +
-      tab("gantt", "גאנט") + tab("overview", "תמונת מצב") + tab("attn", "לטיפול" + (late ? " (" + late + ")" : "")) + '</div>';
+      tab("gantt", "גאנט") + tab("overview", "תמונת מצב") + tab("attn", "לטיפול" + (late ? " (" + late + ")" : "")) + tab("report", "דוח יומי / שבועי") + '</div>';
     if (S.tab === "gantt") {
       h += '<div class="tools"><input type="search" id="q" placeholder="חיפוש משימה, WBS או אחראי" value="' + esc(S.q) + '" aria-label="חיפוש">' +
         '<select id="own" aria-label="סינון לפי אחראי"><option value="">כל האחראים</option>' + owners().map(function (o) { return '<option' + (o === S.owner ? " selected" : "") + '>' + esc(o) + '</option>'; }).join("") + '</select>' +
@@ -170,6 +170,7 @@
       h += gantt();
       h += '<div class="legend"><span><i class="sw" style="background:var(--ok)"></i>הושלם</span><span><i class="sw" style="background:var(--bad)"></i>באיחור (עבר תאריך היעד)</span><span><i class="sw" style="background:var(--warn)"></i>צפי חריגה מהתוכנית</span><span><i class="sw" style="background:var(--accent)"></i>בביצוע</span><span><i class="sw" style="background:var(--bar)"></i>מתוכנן</span><span><i class="sw" style="background:var(--bar-base);height:3px"></i>תוכנית הבסיס (כשיש סטייה)</span><span><i class="sw" style="background:var(--today);width:2px;height:12px"></i>היום</span><span><i class="sw" style="background:var(--pink);transform:rotate(45deg);width:8px;height:8px"></i>אבן דרך</span></div>';
     } else if (S.tab === "overview") h += overview();
+    else if (S.tab === "report") h += report();
     else h += attention();
     app.innerHTML = h;
     renderDrawer();
@@ -192,8 +193,10 @@
     var R = range(), wk = S.zoom, day = wk / 7, tlW = R.weeks * wk;
     var list = rows();
     function x(n) { return (n - R.lo) * day; }
-    var h = '<div class="gantt" id="gantt" style="--wk:' + wk + 'px;--tlW:' + tlW + 'px"><div class="gin">';
-    h += '<div class="row hdr"><div class="info"><span></span><span>WBS</span><span>משימה</span><span class="c-own">אחראי</span><span>יעד / צפי</span><span class="c-st">מצב</span></div><div class="tl">';
+    var h = '<div class="gantt' + (S.edit ? ' editing' : '') + '" id="gantt" style="--wk:' + wk + 'px;--tlW:' + tlW + 'px"><div class="gin">';
+    if (S.edit) h += '<datalist id="owners-all">' + owners().map(function (o) { return '<option value="' + esc(o) + '">'; }).join("") + '</datalist>';
+    h += S.edit ? '<div class="row hdr"><div class="info"><span></span><span>WBS</span><span>משימה</span><span>אחראי ביצוע</span><span>התחלה</span><span>יעד</span><span>סטטוס</span></div><div class="tl">'
+      : '<div class="row hdr"><div class="info"><span></span><span>WBS</span><span>משימה</span><span class="c-own">אחראי</span><span>יעד / צפי</span><span class="c-st">מצב</span></div><div class="tl">';
     for (var w = 0; w < R.weeks; w++) {
       var a = R.lo + w * 7, cur = TODAY >= a && TODAY <= a + 6;
       h += '<div class="wk' + (cur ? " now" : "") + '" style="right:' + (w * wk) + 'px;width:' + wk + 'px">' + (wk >= 80 ? fm(a) + "–" + fm(a + 6) : fm(a)) + '</div>';
@@ -212,10 +215,22 @@
       else if (S.edit) h += '<button class="check' + (c.done ? " on" : "") + '" data-done="' + esc(t.id) + '" aria-label="סימון כהושלם" aria-pressed="' + c.done + '">' + (c.done ? '<svg width="12" height="12" viewBox="0 0 12 12"><path d="m2.5 6.2 2.4 2.3 4.6-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' : "") + '</button>';
       else h += '<span></span>';
       h += '<span class="wbs">' + esc(t.id) + '</span>';
+      if (S.edit) {
+        var tid = esc(t.id);
+        h += '<span class="nm" style="padding-inline-start:' + (2 + (r.lvl - 1) * 12) + 'px"><input class="ie" data-t="' + tid + '" data-k="name" value="' + esc(t.name) + '" aria-label="שם משימה ' + tid + '"></span>';
+        h += '<span><input class="ie' + (!t.owner && !ch ? ' miss' : '') + '" list="owners-all" data-t="' + tid + '" data-k="owner" value="' + esc(t.owner) + '" placeholder="' + (ch ? '' : 'חסר אחראי') + '" aria-label="אחראי ' + tid + '"></span>';
+        if (ch) h += '<span class="dt">' + fm(c.bs) + '</span><span class="dt">' + fm(c.be) + '</span><span class="st"><span class="pill ' + st[0] + '">' + st[1] + '</span></span>';
+        else {
+          h += '<span><input type="date" class="ie" data-t="' + tid + '" data-k="start" value="' + esc(t.start) + '" aria-label="התחלה ' + tid + '"></span>';
+          h += '<span><input type="date" class="ie" data-t="' + tid + '" data-k="end" value="' + esc(t.end) + '" aria-label="יעד ' + tid + '"></span>';
+          h += '<span><select class="ie st-' + (c.late ? 'late' : t.status) + '" data-t="' + tid + '" data-k="status" aria-label="סטטוס ' + tid + '">' + [["todo", "טרם החל"], ["doing", "בביצוע"], ["done", "הושלם"]].map(function (o) { return '<option value="' + o[0] + '"' + (t.status === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") + '</select></span>';
+        }
+      } else {
       h += '<span class="nm" style="padding-inline-start:' + (6 + (r.lvl - 1) * 14) + 'px" title="' + esc(t.name) + '">' + esc(t.name) + '</span>';
-      h += '<span class="own c-own" title="' + esc(t.owner) + '">' + (t.owner ? esc(t.owner) : (S.edit && !ch ? '<span class="pill p-miss">חסר אחראי</span>' : "")) + '</span>';
+      h += '<span class="own c-own" title="' + esc(t.owner) + '">' + esc(t.owner) + '</span>';
       h += '<span class="dt">' + fm(c.fe) + (c.slip && c.be != null && !c.par ? '<span class="was">' + fm(c.be) + '</span>' : "") + '</span>';
       h += '<span class="st c-st"><span class="pill ' + st[0] + '">' + st[1] + '</span></span>';
+      }
       h += '</div><div class="tl">';
       if (c.fs != null && c.fe != null) {
         var right = x(c.fs), width = Math.max((c.fe - c.fs + 1) * day, 6), tip = esc(t.id + " " + t.name + " · " + fm(c.fs) + "–" + fm(c.fe) + (c.slip ? " (תוכנית: " + fm(c.bs) + "–" + fm(c.be) + ")" : ""));
@@ -282,6 +297,7 @@
   var drawerEl = null;
   function renderDrawer() {
     if (drawerEl) { drawerEl.remove(); drawerEl = null; }
+    if (S.sel === "__project" && S.edit) { mountDrawer(projectDrawer()); return; }
     var t = S.sel && byId[S.sel]; if (!t) return;
     var c = C[t.id], ch = (kids[t.id] || []).length, st = statusOf(t);
     var dependents = DATA.tasks.filter(function (x) { return (x.deps || []).indexOf(t.id) >= 0; }).map(function (x) { return x.id; });
@@ -312,10 +328,87 @@
       h += '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-a="add-child">+ תת-משימה</button><button class="btn sm danger" data-a="delete">מחיקת משימה</button></div>';
     }
     h += '</div>';
+    mountDrawer(h);
+  }
+  function mountDrawer(h) {
     drawerEl = document.createElement("aside");
-    drawerEl.className = "drawer"; drawerEl.setAttribute("aria-label", "פרטי משימה");
+    drawerEl.className = "drawer"; drawerEl.setAttribute("aria-label", "פרטים לעריכה");
     drawerEl.innerHTML = h;
     document.body.appendChild(drawerEl);
+  }
+  function projectDrawer() {
+    var p = DATA.project;
+    function pf(k, l, type) { return '<div class="f"><label for="p-' + k + '">' + l + '</label><input id="p-' + k + '" data-pk="' + k + '" type="' + (type || "text") + '" value="' + esc(p[k] || "") + '"' + (k === "goLiveTask" ? ' dir="ltr"' : '') + '></div>'; }
+    var h = '<header><div><div class="wbs">הגדרות</div><h2>פרטי פרויקט ואבני דרך</h2></div><button class="x" data-a="close" aria-label="סגירה">×</button></header><div class="body">';
+    h += pf("title", "שם הפרויקט") + pf("client", "לקוח") + pf("subtitle", "תת-כותרת");
+    h += '<div class="f2">' + pf("goLiveDate", "מועד Go-Live מתוכנן", "date") + pf("goLiveTask", "משימת Go-Live (WBS)") + '</div>';
+    h += '<div class="hint">מועד ה-Go-Live הצפוי זז אוטומטית אם משימת ה-Go-Live נדחית.</div>';
+    h += '<h3 style="margin:8px 0 0;font-size:14px;color:var(--head)">אבני דרך</h3>';
+    (p.milestones || []).forEach(function (m, i) {
+      h += '<div class="msrow"><input type="date" data-mi="' + i + '" data-mk="date" value="' + esc(m.date) + '" aria-label="תאריך אבן דרך"><input data-mi="' + i + '" data-mk="label" value="' + esc(m.label) + '" aria-label="שם אבן דרך"><button class="btn sm danger" data-a="ms-del" data-i="' + i + '" aria-label="הסרת אבן דרך">הסרה</button></div>';
+    });
+    h += '<div><button class="btn sm" data-a="ms-add">+ אבן דרך</button></div></div>';
+    return h;
+  }
+
+  /* ---------- reports ---------- */
+  function period() {
+    var ref = dn(S.rpDate || TODAY_S);
+    if (S.rp === "weekly") { var a = ref - new Date(ref * 864e5).getUTCDay(); return { a: a, b: a + 6, n0: a + 7, n1: a + 13, label: "שבוע " + fm(a) + "–" + fmy(a + 6), next: "מתוכנן לשבוע הבא (" + fm(a + 7) + "–" + fm(a + 13) + ")" }; }
+    return { a: ref, b: ref, n0: ref + 1, n1: ref + 7, label: "יום " + fmy(ref), next: "יעד ב-7 הימים הבאים (" + fm(ref + 1) + "–" + fm(ref + 7) + ")" };
+  }
+  function reportData() {
+    var P = period(), L = leaves();
+    function byFe(a, b) { return (C[a.id].fe || 0) - (C[b.id].fe || 0); }
+    return {
+      P: P, total: L.length, doneAll: L.filter(function (t) { return C[t.id].done; }).length,
+      done: L.filter(function (t) { var v = dn(t.actualEnd); return C[t.id].done && v != null && v >= P.a && v <= P.b; }).sort(function (a, b) { return a.actualEnd < b.actualEnd ? -1 : 1; }),
+      late: L.filter(function (t) { return C[t.id].late; }).sort(byFe),
+      slip: L.filter(function (t) { var c = C[t.id]; return c.slip > 0 && !c.done && !c.late; }).sort(byFe),
+      next: L.filter(function (t) { var c = C[t.id]; return !c.done && c.fe != null && c.fe >= P.n0 && c.fe <= P.n1; }).sort(byFe)
+    };
+  }
+  function doneNote(t) { var c = C[t.id], d = c.fe - c.be; return "הושלם " + fm(c.fe) + (c.be == null ? "" : d > 0 ? " · באיחור של " + d + " ימים" : d < 0 ? " · מוקדם ב-" + (-d) + " ימים" : " · בזמן"); }
+  function lateNote(t) { var c = C[t.id]; return "יעד " + fm(c.fe) + " · " + (TODAY - c.fe) + " ימי איחור"; }
+  function slipNote(t) { var c = C[t.id]; return "תוכנית " + fm(c.be) + " · צפי " + fm(c.fe) + " (+" + c.slip + ")"; }
+  function dueNote(t) { return "יעד " + fm(C[t.id].fe); }
+  function listBlock(title, arr, emptyTxt, fn) {
+    var h = '<div class="card"><h2>' + title + ' <span class="note">(' + arr.length + ')</span></h2><div class="list">';
+    if (!arr.length) h += '<div class="note">' + emptyTxt + '</div>';
+    arr.forEach(function (t) { var st = statusOf(t); h += '<div class="li" data-open="' + esc(t.id) + '"><span class="wbs">' + esc(t.id) + '</span><span><div>' + esc(t.name) + '</div><div class="o">' + esc(t.owner || "ללא אחראי") + ' · ' + fn(t) + '</div></span><span class="pill ' + st[0] + '">' + st[1] + '</span></div>'; });
+    return h + '</div></div>';
+  }
+  function report() {
+    var R = reportData(), pc = R.total ? Math.round(R.doneAll / R.total * 100) : 0;
+    var h = '<div class="card rp-head"><div><h2 style="margin:0">' + (S.rp === "weekly" ? "סיכום שבועי" : "עדכון יומי") + ' · ' + R.P.label + '</h2><div class="note">התקדמות כוללת ' + pc + '% · ' + R.doneAll + ' מתוך ' + R.total + ' משימות הושלמו · ' + R.late.length + ' באיחור</div></div>' +
+      '<div class="tools"><div class="tabs" role="group" aria-label="סוג הדוח"><button class="tab" data-a="rp-daily" aria-selected="' + (S.rp !== "weekly") + '">יומי</button><button class="tab" data-a="rp-weekly" aria-selected="' + (S.rp === "weekly") + '">שבועי</button></div>' +
+      '<input type="date" id="rp-date" value="' + esc(S.rpDate || TODAY_S) + '" aria-label="תאריך הדוח"><button class="btn primary sm" data-a="rp-copy">העתקת הדוח</button></div></div>';
+    h += '<div class="grid2"><div style="display:flex;flex-direction:column;gap:16px">' +
+      listBlock("משימות שהושלמו", R.done, S.rp === "weekly" ? "לא הושלמו משימות בשבוע זה." : "לא הושלמו משימות ביום זה.", doneNote) +
+      listBlock("משימות מתעכבות (עבר תאריך היעד)", R.late, "אין משימות באיחור.", lateNote) +
+      '</div><div style="display:flex;flex-direction:column;gap:16px">' +
+      listBlock("צפי חריגה מהתוכנית", R.slip, "אין משימות עם צפי חריגה.", slipNote) +
+      listBlock(R.P.next, R.next, "אין משימות בטווח זה.", dueNote) + '</div></div>';
+    return h;
+  }
+  function reportText() {
+    var R = reportData(), p = DATA.project, pc = R.total ? Math.round(R.doneAll / R.total * 100) : 0, L = [];
+    L.push((S.rp === "weekly" ? "סיכום שבועי" : "עדכון יומי") + " – " + p.title);
+    L.push(R.P.label);
+    L.push("התקדמות כוללת: " + pc + "% (" + R.doneAll + " מתוך " + R.total + " משימות)");
+    function sec(title, arr, fn) { L.push(""); L.push(title + " (" + arr.length + "):"); if (!arr.length) L.push("אין"); arr.forEach(function (t) { L.push("• " + t.id + " " + t.name + " – " + (t.owner || "ללא אחראי") + " – " + fn(t)); }); }
+    sec("הושלמו", R.done, doneNote); sec("מתעכבות", R.late, lateNote); sec("צפי חריגה מהתוכנית", R.slip, slipNote); sec(R.P.next, R.next, dueNote);
+    return L.join("\n");
+  }
+  function copyReport() {
+    var txt = reportText();
+    function fallback() {
+      var m = document.createElement("div"); m.className = "modal";
+      m.innerHTML = '<div class="card" role="dialog" aria-modal="true"><h2>העתקת הדוח</h2><textarea id="rp-text" style="width:100%;min-height:260px;border:1px solid var(--line);border-radius:7px;padding:8px;background:var(--bg)"></textarea><div class="row-btns"><button class="btn" data-no>סגירה</button></div></div>';
+      document.body.appendChild(m); var ta = m.querySelector("textarea"); ta.value = txt; ta.focus(); ta.select();
+      m.addEventListener("click", function (e) { if (e.target.closest("[data-no]") || e.target === m) m.remove(); });
+    }
+    try { navigator.clipboard.writeText(txt).then(function () { toast("הדוח הועתק. אפשר להדביק במייל או בהודעה."); }, fallback); } catch (e) { fallback(); }
   }
   function linkId(id) { return byId[id] ? '<a href="#" data-open="' + esc(id) + '">' + esc(id) + '</a>' : '<span style="color:var(--bad)">' + esc(id) + ' (לא קיימת)</span>'; }
   function fld(k, l, input) { return '<div class="f"><label for="e-' + k + '">' + l + '</label>' + input + '</div>'; }
@@ -334,7 +427,7 @@
   }
 
   /* ---------- editing ---------- */
-  function touch() { S.dirty = JSON.stringify(DATA.tasks) !== JSON.stringify(SAVED.tasks); stashDraft(); }
+  function touch() { S.dirty = JSON.stringify(DATA.tasks) !== JSON.stringify(SAVED.tasks) || JSON.stringify(DATA.project) !== JSON.stringify(SAVED.project); stashDraft(); }
   var rt = null;
   function rerenderSoon() { clearTimeout(rt); rt = setTimeout(function () { var sc = keepScroll(); var focus = document.activeElement && document.activeElement.id; render(); restoreScroll(sc); if (focus && document.getElementById(focus)) { var el = document.getElementById(focus); el.focus(); } }, 250); }
   function keepScroll() { var g = document.getElementById("gantt"); return g ? [g.scrollTop, g.scrollLeft, window.scrollY] : [0, 0, window.scrollY]; }
@@ -392,6 +485,8 @@
       if (o.notes !== t.notes) out.push("עודכנו הערות ב-" + n);
     });
     SAVED.tasks.forEach(function (t) { if (!b[t.id]) out.push("הוסרה משימה: " + t.id + " " + t.name); });
+    if (JSON.stringify(SAVED.project.milestones) !== JSON.stringify(DATA.project.milestones)) out.push("עודכנו אבני הדרך של הפרויקט");
+    ["title", "client", "subtitle", "goLiveDate"].forEach(function (k) { if (SAVED.project[k] !== DATA.project[k]) out.push(k === "goLiveDate" ? "מועד Go-Live עודכן ל-" + fmy(dn(DATA.project.goLiveDate)) : "עודכנו פרטי הפרויקט"); });
     return out;
   }
   function regenerate() {
@@ -399,13 +494,13 @@
     return "<!doctype html><html><head><meta charset=utf8><meta name=viewport content=\"width=device-width,initial-scale=1,viewport-fit=cover\"><style>" + RESET + "</style></head><body>" +
       HEAD + '<style id="app-style">' + CSS + '</style><div id="app"></div><script id="pmo-data" type="application/json">' + json + "<\/script><script id=\"app-src\">" + SRC + "<\/script></body></html>";
   }
-  function stashDraft() { try { if (S.dirty) sessionStorage.setItem("pmo-draft", JSON.stringify({ base: SAVED.savedAt, tasks: DATA.tasks })); else sessionStorage.removeItem("pmo-draft"); } catch (e) {} }
+  function stashDraft() { try { if (S.dirty) sessionStorage.setItem("pmo-draft", JSON.stringify({ base: SAVED.savedAt, tasks: DATA.tasks, project: DATA.project })); else sessionStorage.removeItem("pmo-draft"); } catch (e) {} }
   async function save() {
     if (!S.dirty || S.saving) return;
     var items = diff(), prevLog = DATA.log;
     DATA.log = [{ at: new Date().toISOString(), items: items }].concat(DATA.log || []).slice(0, 80);
     var prevSaved = DATA.savedAt; DATA.savedAt = new Date().toISOString();
-    try { sessionStorage.setItem("pmo-draft", JSON.stringify({ base: SAVED.savedAt, tasks: DATA.tasks, pending: DATA.savedAt })); } catch (e) {}
+    try { sessionStorage.setItem("pmo-draft", JSON.stringify({ base: SAVED.savedAt, tasks: DATA.tasks, project: DATA.project, pending: DATA.savedAt })); } catch (e) {}
     S.saving = true; rerender();
     var art = null;
     try { art = window.claude && window.claude.use ? await window.claude.use("artifact") : null; } catch (e) {}
@@ -424,9 +519,9 @@
     try {
       var d = JSON.parse(sessionStorage.getItem("pmo-draft") || "null"); if (!d) return;
       if (d.pending && d.pending === DATA.savedAt) { sessionStorage.removeItem("pmo-draft"); return; }
-      if (JSON.stringify(d.tasks) === JSON.stringify(DATA.tasks)) { sessionStorage.removeItem("pmo-draft"); return; }
+      if (JSON.stringify(d.tasks) === JSON.stringify(DATA.tasks) && (!d.project || JSON.stringify(d.project) === JSON.stringify(DATA.project))) { sessionStorage.removeItem("pmo-draft"); return; }
       confirmBox("נמצאו שינויים שלא פורסמו", d.base === DATA.savedAt ? "יש שינויים מהעריכה הקודמת שלא פורסמו. לשחזר אותם?" : "יש שינויים שלא פורסמו, ובינתיים פורסמה גרסה חדשה. שחזור יחליף את רשימת המשימות בגרסת הטיוטה. לשחזר?", "שחזור", function () {
-        DATA.tasks = d.tasks; S.edit = true; touch(); rerender();
+        DATA.tasks = d.tasks; if (d.project) DATA.project = d.project; S.edit = true; touch(); rerender();
       });
     } catch (e) {}
   }
@@ -437,9 +532,25 @@
     S.dl.save({ filename: "gantt-pdi-" + TODAY_S + ".csv", data: csv }).catch(function (e) { if (e && e.code !== "declined") toast("הייצוא לא הושלם."); });
   }
 
+  function inlineEdit(t, k, v) {
+    if (k === "name") { if (!v.trim()) { rerender(); return; } t.name = v.trim(); }
+    else if (k === "owner") t.owner = v.trim();
+    else if (k === "start" || k === "end") { t[k] = v; if (t.start && t.end && t.end < t.start) { if (k === "start") t.end = t.start; else t.start = t.end; } }
+    else if (k === "status") { t.status = v; if (v === "done") { t.actualEnd = t.actualEnd || TODAY_S; t.forecastEnd = ""; } else t.actualEnd = ""; }
+    else return;
+    touch();
+    setTimeout(function () {
+      var a = document.activeElement, fk = a && a.dataset && a.dataset.t ? [a.dataset.t, a.dataset.k] : null;
+      rerender();
+      if (fk) { var n = document.querySelector('.ie[data-t="' + CSS_esc(fk[0]) + '"][data-k="' + fk[1] + '"]'); if (n) n.focus(); }
+    }, 0);
+  }
+  window.addEventListener("beforeunload", function (e) { if (S.dirty && !S.saving) { e.preventDefault(); e.returnValue = ""; } });
+
   /* ---------- events ---------- */
   document.addEventListener("click", function (e) {
     if (e.target.closest(".modal")) return;
+    if (e.target.closest(".row .ie")) return;
     var el;
     if ((el = e.target.closest("[data-tw]"))) { var id = el.getAttribute("data-tw"); if (S.collapsed[id]) delete S.collapsed[id]; else S.collapsed[id] = 1; savePref(); rerender(); return; }
     if ((el = e.target.closest("[data-done]"))) { toggleDone(el.getAttribute("data-done")); return; }
@@ -453,6 +564,12 @@
         case "save": save(); break;
         case "discard": confirmBox("ביטול שינויים", "לבטל את כל השינויים שטרם פורסמו?", "ביטול השינויים", function () { DATA = JSON.parse(JSON.stringify(SAVED)); S.dirty = false; stashDraft(); rerender(); }); break;
         case "add-root": newTask(null); break;
+        case "project": S.sel = "__project"; rerender(); break;
+        case "ms-add": DATA.project.milestones = (DATA.project.milestones || []).concat([{ date: TODAY_S, label: "אבן דרך חדשה" }]); touch(); rerender(); break;
+        case "ms-del": DATA.project.milestones.splice(+el.getAttribute("data-i"), 1); touch(); rerender(); break;
+        case "rp-daily": S.rp = "daily"; rerender(); break;
+        case "rp-weekly": S.rp = "weekly"; rerender(); break;
+        case "rp-copy": copyReport(); break;
         case "add-child": newTask(S.sel); break;
         case "delete": askDelete(); break;
         case "expand": S.collapsed = {}; savePref(); rerender(); break;
@@ -477,6 +594,11 @@
     var id = e.target.id;
     if (id === "own") { S.owner = e.target.value; rerender(); return; }
     if (id === "zoom") { S.zoom = +e.target.value; savePref(); rerender(); return; }
+    if (id === "rp-date") { S.rpDate = e.target.value || TODAY_S; rerender(); return; }
+    var ds_ = e.target.dataset || {};
+    if (ds_.t && ds_.k && byId[ds_.t]) { inlineEdit(byId[ds_.t], ds_.k, e.target.value); return; }
+    if (ds_.pk) { var pv = e.target.value; if (ds_.pk === "goLiveTask") pv = pv.trim(); DATA.project[ds_.pk] = pv; touch(); rerender(); return; }
+    if (ds_.mk != null && ds_.mi != null) { var ms = DATA.project.milestones[+ds_.mi]; if (ms) { ms[ds_.mk] = e.target.value; touch(); rerender(); } return; }
     var t = S.sel && byId[S.sel]; if (!t || id.indexOf("e-") !== 0) return;
     var k = id.slice(2), v = e.target.value;
     if (k === "deps") t.deps = v.split(/[,\s;]+/).map(function (x) { return x.trim(); }).filter(function (x) { return x && x !== t.id; });
@@ -503,8 +625,11 @@
   render();
   (function () { var g = document.getElementById("gantt"); if (!g) return; var R = range(); var off = (TODAY - R.lo) * S.zoom / 7 - S.zoom * 2; if (off > 0) g.scrollLeft = -off; })();
   (async function () {
-    var cl = window.claude; if (!cl || !cl.use) return;
-    try { var u = await cl.use("user"); S.canEdit = u ? !!(await u.canEdit()) : false; } catch (e) { S.canEdit = false; }
+    var forced = /(^|#)edit$/.test(location.hash || "");
+    var cl = window.claude;
+    if (!cl || !cl.use) { if (forced) { S.canEdit = true; S.edit = true; rerender(); } return; }
+    try { var u = await cl.use("user"); S.canEdit = u ? !!((await u.canEdit()) || (await u.isOwner())) : false; } catch (e) { S.canEdit = false; }
+    if (forced) { S.canEdit = true; S.edit = true; }
     try { S.dl = await cl.use("downloads"); } catch (e) { S.dl = null; }
     rerender();
     if (S.canEdit) restoreDraft();
