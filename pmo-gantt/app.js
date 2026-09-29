@@ -5,6 +5,9 @@
   var SRC = document.getElementById("app-src").textContent;
   var CSS = document.getElementById("app-style").textContent;
   var DATA = JSON.parse(document.getElementById("pmo-data").textContent);
+  var UIDN = 0;
+  function newUid() { return "u" + Date.now().toString(36) + (UIDN++).toString(36) + Math.random().toString(36).slice(2, 6); }
+  DATA.tasks.forEach(function (t) { if (!t.uid) t.uid = newUid(); });
   var SAVED = JSON.parse(JSON.stringify(DATA));
   var app = document.getElementById("app");
 
@@ -126,6 +129,7 @@
   function owners() { var m = {}; DATA.tasks.forEach(function (t) { if (t.owner) m[t.owner] = 1; }); return Object.keys(m).sort(); }
 
   /* ---------- render ---------- */
+  var ICON_GRIP = '<svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true"><g fill="currentColor"><circle cx="3" cy="3" r="1.2"/><circle cx="7" cy="3" r="1.2"/><circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/><circle cx="3" cy="11" r="1.2"/><circle cx="7" cy="11" r="1.2"/></g></svg>';
   var ICON_CHEV = '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   function render() {
     build();
@@ -141,7 +145,7 @@
     if (S.canEdit) h += '<button class="btn ' + (S.edit ? "on" : "") + '" data-a="toggle-edit" aria-pressed="' + S.edit + '">' + (S.edit ? "סיום עריכה" : "מצב עריכה") + '</button>';
     h += '</div></header>';
     if (S.edit) {
-      h += '<div class="editbar"><span class="msg">' + (S.dirty ? "יש שינויים שטרם פורסמו. הלקוח יראה אותם רק אחרי פרסום." : "מצב עריכה: אפשר לעדכן שם, אחראי, תאריכים וסטטוס ישירות בטבלה. לחיצה על מספר ה-WBS פותחת את כל השדות.") + '</span>' +
+      h += '<div class="editbar"><span class="msg">' + (S.dirty ? "יש שינויים שטרם פורסמו. הלקוח יראה אותם רק אחרי פרסום." : "מצב עריכה: עדכון ישיר בטבלה. גרירה של ⋮⋮ משנה את מיקום השורה (שחרור באמצע שורת פרק מכניס לתוכו). לחיצה על השורה פותחת את כל השדות.") + '</span>' +
         '<button class="btn sm" data-a="project">פרטי פרויקט ואבני דרך</button><button class="btn sm" data-a="add-root">+ משימת על</button>' +
         (S.dirty ? '<button class="btn sm" data-a="discard">ביטול שינויים</button>' : '') +
         '<button class="btn primary sm" data-a="save" ' + (!S.dirty || S.saving ? "disabled" : "") + '>' + (S.saving ? "מפרסם…" : "פרסום השינויים") + '</button></div>';
@@ -195,7 +199,7 @@
     function x(n) { return (n - R.lo) * day; }
     var h = '<div class="gantt' + (S.edit ? ' editing' : '') + '" id="gantt" style="--wk:' + wk + 'px;--tlW:' + tlW + 'px"><div class="gin">';
     if (S.edit) h += '<datalist id="owners-all">' + owners().map(function (o) { return '<option value="' + esc(o) + '">'; }).join("") + '</datalist>';
-    h += S.edit ? '<div class="row hdr"><div class="info"><span></span><span>WBS</span><span>משימה</span><span>אחראי ביצוע</span><span>התחלה</span><span>יעד</span><span>סטטוס</span></div><div class="tl">'
+    h += S.edit ? '<div class="row hdr"><div class="info"><span></span><span></span><span>WBS</span><span>משימה</span><span>אחראי ביצוע</span><span>התחלה</span><span>יעד</span><span>סטטוס</span></div><div class="tl">'
       : '<div class="row hdr"><div class="info"><span></span><span>WBS</span><span>משימה</span><span class="c-own">אחראי</span><span>יעד / צפי</span><span class="c-st">מצב</span></div><div class="tl">';
     for (var w = 0; w < R.weeks; w++) {
       var a = R.lo + w * 7, cur = TODAY >= a && TODAY <= a + 6;
@@ -211,6 +215,7 @@
       var t = r.t, c = C[t.id], st = statusOf(t), ch = (kids[t.id] || []).length;
       var cls = "row l" + Math.min(r.lvl, 3) + (ch ? " par" : "") + (c.done ? " done" : c.late ? " late" : "") + (S.sel === t.id ? " sel" : "");
       h += '<div class="' + cls + '" data-id="' + esc(t.id) + '"><div class="info">';
+      if (S.edit) h += '<span class="drag" draggable="true" data-drag="' + esc(t.id) + '" title="גרירה לשינוי מיקום" aria-label="גרירה לשינוי מיקום">' + ICON_GRIP + '</span>';
       if (ch) h += '<button class="tw' + (S.collapsed[t.id] && !filtering() ? "" : " col") + '" data-tw="' + esc(t.id) + '" aria-label="פתיחה או כיווץ">' + ICON_CHEV + '</button>';
       else if (S.edit) h += '<button class="check' + (c.done ? " on" : "") + '" data-done="' + esc(t.id) + '" aria-label="סימון כהושלם" aria-pressed="' + c.done + '">' + (c.done ? '<svg width="12" height="12" viewBox="0 0 12 12"><path d="m2.5 6.2 2.4 2.3 4.6-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' : "") + '</button>';
       else h += '<span></span>';
@@ -325,7 +330,7 @@
         h += '<dl class="kv"><dt>טווח (מחושב)</dt><dd class="dt">' + fmy(c.fs) + ' – ' + fmy(c.fe) + '</dd><dt>התקדמות</dt><dd>' + Math.round(c.pct * 100) + '% (' + c.doneN + '/' + c.leaves + ')</dd></dl><div class="hint">התאריכים והאחוז של משימת על מחושבים מתתי-המשימות.</div>';
       }
       h += fld("notes", "הערות (גלויות ללקוח)", '<textarea id="e-notes">' + esc(t.notes) + '</textarea>');
-      h += '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-a="add-child">+ תת-משימה</button><button class="btn sm danger" data-a="delete">מחיקת משימה</button></div>';
+      h += '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-a="move-up">הזזה למעלה</button><button class="btn sm" data-a="move-down">הזזה למטה</button><button class="btn sm" data-a="add-child">+ תת-משימה</button><button class="btn sm danger" data-a="delete">מחיקת משימה</button></div>';
     }
     h += '</div>';
     mountDrawer(h);
@@ -440,7 +445,7 @@
   function newTask(pid) {
     var p = pid && byId[pid], pc = p && C[pid];
     var s = pc && pc.bs != null ? ds(Math.max(pc.bs, TODAY)) : TODAY_S;
-    var t = { id: nextChildId(pid), name: "משימה חדשה", notes: "", start: s, end: ds(dn(s) + 6), deps: [], owner: "", status: "todo", forecastEnd: "", actualEnd: "" };
+    var t = { uid: newUid(), id: nextChildId(pid), name: "משימה חדשה", notes: "", start: s, end: ds(dn(s) + 6), deps: [], owner: "", status: "todo", forecastEnd: "", actualEnd: "" };
     DATA.tasks.push(t);
     if (pid) delete S.collapsed[pid];
     S.sel = t.id; touch(); rerender();
@@ -471,24 +476,94 @@
   function toast(msg) { var t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg; document.body.appendChild(t); setTimeout(function () { t.remove(); }, 3600); }
 
   function diff() {
-    var a = {}, b = {}, out = [];
-    SAVED.tasks.forEach(function (t) { a[t.id] = t; }); DATA.tasks.forEach(function (t) { b[t.id] = t; });
+    var a = {}, b = {}, out = [], ren = 0, o2n = {};
+    SAVED.tasks.forEach(function (t) { a[t.uid || t.id] = t; }); DATA.tasks.forEach(function (t) { b[t.uid || t.id] = t; });
+    DATA.tasks.forEach(function (t) { var o = a[t.uid || t.id]; if (o) o2n[o.id] = t.id; });
     DATA.tasks.forEach(function (t) {
-      var o = a[t.id], n = t.id + " " + t.name;
+      var o = a[t.uid || t.id], n = t.id + " " + t.name;
       if (!o) { out.push("נוספה משימה: " + n); return; }
+      if (o.id !== t.id) ren++;
       if (o.status !== t.status) out.push(t.status === "done" ? "הושלמה: " + n : t.status === "doing" ? "בביצוע: " + n : "סטטוס עודכן: " + n);
       if (o.end !== t.end || o.start !== t.start) out.push("עודכנו תאריכי התוכנית של " + n + ": " + fm(dn(t.start)) + "–" + fm(dn(t.end)));
       if (o.forecastEnd !== t.forecastEnd && t.forecastEnd) out.push("צפי סיום מעודכן ל-" + n + ": " + fm(dn(t.forecastEnd)));
       if (o.owner !== t.owner) out.push("אחראי ביצוע ל-" + n + ": " + (t.owner || "—"));
       if (o.name !== t.name) out.push("שם משימה " + t.id + " עודכן");
-      if ((o.deps || []).join() !== (t.deps || []).join()) out.push("עודכנו תלויות של " + n);
+      if ((o.deps || []).map(function (d) { return o2n[d] || d; }).join() !== (t.deps || []).join()) out.push("עודכנו תלויות של " + n);
       if (o.notes !== t.notes) out.push("עודכנו הערות ב-" + n);
     });
-    SAVED.tasks.forEach(function (t) { if (!b[t.id]) out.push("הוסרה משימה: " + t.id + " " + t.name); });
+    SAVED.tasks.forEach(function (t) { if (!b[t.uid || t.id]) out.push("הוסרה משימה: " + t.id + " " + t.name); });
+    if (ren) out.unshift("עודכן סדר המשימות (" + ren + " משימות קיבלו מספר WBS חדש)");
     if (JSON.stringify(SAVED.project.milestones) !== JSON.stringify(DATA.project.milestones)) out.push("עודכנו אבני הדרך של הפרויקט");
     ["title", "client", "subtitle", "goLiveDate"].forEach(function (k) { if (SAVED.project[k] !== DATA.project[k]) out.push(k === "goLiveDate" ? "מועד Go-Live עודכן ל-" + fmy(dn(DATA.project.goLiveDate)) : "עודכנו פרטי הפרויקט"); });
     return out;
   }
+
+  /* ---------- reorder ---------- */
+  function orderedTree() {
+    build();
+    function node(t) { return { t: t, ch: (kids[t.id] || []).map(node) }; }
+    return roots.map(node);
+  }
+  function applyTree(tree) {
+    var map = {}, list = [];
+    (function walk(nodes, prefix) { nodes.forEach(function (n, i) { var nid = (prefix ? prefix + "." : "") + (i + 1); map[n.t.id] = nid; list.push(n.t); walk(n.ch, nid); }); })(tree, "");
+    list.forEach(function (t) { t.deps = (t.deps || []).map(function (d) { return map[d] || d; }); });
+    list.forEach(function (t) { t.id = map[t.id]; });
+    if (DATA.project.goLiveTask && map[DATA.project.goLiveTask]) DATA.project.goLiveTask = map[DATA.project.goLiveTask];
+    var nc = {}; Object.keys(S.collapsed).forEach(function (k) { if (map[k]) nc[map[k]] = 1; }); S.collapsed = nc; savePref();
+    if (S.sel && map[S.sel]) S.sel = map[S.sel];
+    DATA.tasks = list;
+  }
+  function moveTask(src, tgt, pos) {
+    if (!src || !tgt || src === tgt || tgt.indexOf(src + ".") === 0) return false;
+    var tree = orderedTree(), node = null;
+    (function detach(nodes) { for (var i = 0; i < nodes.length; i++) { if (nodes[i].t.id === src) { node = nodes.splice(i, 1)[0]; return true; } if (detach(nodes[i].ch)) return true; } return false; })(tree);
+    if (!node) return false;
+    var ok = (function insert(nodes) { for (var i = 0; i < nodes.length; i++) { if (nodes[i].t.id === tgt) { if (pos === "inside") nodes[i].ch.push(node); else nodes.splice(pos === "before" ? i : i + 1, 0, node); return true; } if (insert(nodes[i].ch)) return true; } return false; })(tree);
+    if (!ok) return false;
+    var uid = node.t.uid;
+    if (pos === "inside") delete S.collapsed[tgt];
+    applyTree(tree); touch();
+    var moved = DATA.tasks.filter(function (t) { return t.uid === uid; })[0];
+    rerender();
+    if (moved) toast("המשימה הועברה למיקום " + moved.id + ". המספור והתלויות עודכנו.");
+    return true;
+  }
+  function moveSibling(id, dir) {
+    var p = parentOf(id), sibs = p && byId[p] ? (kids[p] || []) : roots;
+    var i = sibs.map(function (t) { return t.id; }).indexOf(id), j = i + dir;
+    if (i < 0 || j < 0 || j >= sibs.length) { toast(dir < 0 ? "המשימה כבר ראשונה ברמה שלה." : "המשימה כבר אחרונה ברמה שלה."); return; }
+    moveTask(id, sibs[j].id, dir < 0 ? "before" : "after");
+  }
+  var DRAG = null, DROP = null, dropRow = null;
+  function clearDrop() { if (dropRow) dropRow.classList.remove("drop-before", "drop-after", "drop-inside"); dropRow = null; DROP = null; }
+  document.addEventListener("dragstart", function (e) {
+    var h = e.target.closest && e.target.closest("[data-drag]"); if (!h || !S.edit) return;
+    DRAG = h.getAttribute("data-drag");
+    try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", DRAG); } catch (x) {}
+    var row = h.closest(".row"); if (row) { row.classList.add("dragging"); try { e.dataTransfer.setDragImage(row, 30, 17); } catch (x) {} }
+  });
+  document.addEventListener("dragover", function (e) {
+    if (!DRAG) return;
+    var g = document.getElementById("gantt");
+    if (g) { var gr = g.getBoundingClientRect(); if (e.clientY < gr.top + 60) g.scrollTop -= 14; else if (e.clientY > gr.bottom - 40) g.scrollTop += 14; }
+    var row = e.target.closest && e.target.closest(".row[data-id]");
+    if (!row || row.classList.contains("hdr")) { clearDrop(); return; }
+    var id = row.getAttribute("data-id");
+    if (id === DRAG || id.indexOf(DRAG + ".") === 0) { clearDrop(); return; }
+    e.preventDefault();
+    try { e.dataTransfer.dropEffect = "move"; } catch (x) {}
+    var r = row.getBoundingClientRect(), y = (e.clientY - r.top) / r.height;
+    var canIn = row.classList.contains("par") || row.classList.contains("l1");
+    var pos = y < 0.3 ? "before" : y > 0.7 ? "after" : canIn ? "inside" : (y < 0.5 ? "before" : "after");
+    if (dropRow !== row || !DROP || DROP.pos !== pos) { clearDrop(); dropRow = row; row.classList.add("drop-" + pos); DROP = { id: id, pos: pos }; }
+  });
+  document.addEventListener("drop", function (e) {
+    if (!DRAG) return; e.preventDefault();
+    var d = DROP, s = DRAG; clearDrop(); DRAG = null;
+    if (d) moveTask(s, d.id, d.pos);
+  });
+  document.addEventListener("dragend", function () { clearDrop(); DRAG = null; var r = document.querySelector(".row.dragging"); if (r) r.classList.remove("dragging"); });
   function regenerate() {
     var json = JSON.stringify(DATA).replace(/</g, "\\u003c");
     return "<!doctype html><html><head><meta charset=utf8><meta name=viewport content=\"width=device-width,initial-scale=1,viewport-fit=cover\"><style>" + RESET + "</style></head><body>" +
@@ -550,7 +625,7 @@
   /* ---------- events ---------- */
   document.addEventListener("click", function (e) {
     if (e.target.closest(".modal")) return;
-    if (e.target.closest(".row .ie")) return;
+    if (e.target.closest(".row .ie") || e.target.closest(".drag")) return;
     var el;
     if ((el = e.target.closest("[data-tw]"))) { var id = el.getAttribute("data-tw"); if (S.collapsed[id]) delete S.collapsed[id]; else S.collapsed[id] = 1; savePref(); rerender(); return; }
     if ((el = e.target.closest("[data-done]"))) { toggleDone(el.getAttribute("data-done")); return; }
@@ -571,6 +646,7 @@
         case "rp-weekly": S.rp = "weekly"; rerender(); break;
         case "rp-copy": copyReport(); break;
         case "add-child": newTask(S.sel); break;
+        case "move-up": case "move-down": moveSibling(S.sel, el.getAttribute("data-a") === "move-up" ? -1 : 1); break;
         case "delete": askDelete(); break;
         case "expand": S.collapsed = {}; savePref(); rerender(); break;
         case "collapse": S.collapsed = {}; roots.forEach(function (t) { if ((kids[t.id] || []).length) S.collapsed[t.id] = 1; }); savePref(); rerender(); break;
