@@ -140,8 +140,9 @@
     var pct = L.length ? Math.round(done / L.length * 100) : 0;
     var h = '';
     h += '<header class="top"><div><div class="eyebrow">' + esc(p.client) + ' · ' + esc(p.subtitle) + '</div><h1>' + esc(p.title) + '</h1>' +
-      '<div class="sub">נכון ל-' + fmy(TODAY) + ' · עדכון אחרון של התוכנית: ' + esc(fmtStamp(DATA.savedAt)) + '</div></div><div class="actions">';
-    if (S.dl) h += '<button class="btn" data-a="export">ייצוא ל-CSV</button>';
+      '<div class="sub">' + (DATA.snapshot ? 'גרסת צפייה · הופקה ב-' + esc(fmtStamp(DATA.snapshot.at)) + ' · עדכון אחרון של התוכנית: ' + esc(fmtStamp(DATA.savedAt)) : 'נכון ל-' + fmy(TODAY) + ' · עדכון אחרון של התוכנית: ' + esc(fmtStamp(DATA.savedAt))) + '</div></div><div class="actions">';
+    if (S.dl && S.canEdit && !DATA.snapshot) h += '<button class="btn" data-a="client-copy">הורדת גרסת לקוח</button>';
+    if (S.dl && !DATA.snapshot) h += '<button class="btn" data-a="export">ייצוא ל-CSV</button>';
     if (S.canEdit) h += '<button class="btn ' + (S.edit ? "on" : "") + '" data-a="toggle-edit" aria-pressed="' + S.edit + '">' + (S.edit ? "סיום עריכה" : "מצב עריכה") + '</button>';
     h += '</div></header>';
     if (S.edit) {
@@ -600,6 +601,16 @@
       });
     } catch (e) {}
   }
+  function clientCopy() {
+    var copy = JSON.parse(JSON.stringify(SAVED));
+    copy.snapshot = { at: new Date().toISOString() };
+    var json = JSON.stringify(copy).replace(/</g, "\\u003c");
+    var html = "<!doctype html><html lang=\"he\" dir=\"rtl\"><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><style>" + RESET + "</style></head><body>" +
+      HEAD + '<style id="app-style">' + CSS + '</style><div id="app"></div><script id="pmo-data" type="application/json">' + json + "<\/script><script id=\"app-src\">" + SRC + "<\/script></body></html>";
+    S.dl.save({ filename: "גאנט PDI - גרסת לקוח " + fm(TODAY).replace(".", "-") + ".html", data: html })
+      .then(function () { toast(S.dirty ? "הקובץ נשמר. הוא כולל רק שינויים שפורסמו, לא את השינויים הפתוחים." : "הקובץ נשמר. אפשר לשלוח אותו ללקוח."); })
+      .catch(function (e) { if (e && e.code !== "declined") toast("ההורדה לא הושלמה (" + (e.code || "שגיאה") + ")."); });
+  }
   function exportCsv() {
     var head = ["WBS", "משימה", "אחראי", "התחלה (תוכנית)", "יעד (תוכנית)", "התחלה (צפי)", "סיום (צפי/בפועל)", "סטייה (ימים)", "מצב", "תלויות", "הערות"];
     var lines = [head].concat(DATA.tasks.map(function (t) { var c = C[t.id]; return [t.id, t.name, t.owner, fmy(c.bs), fmy(c.be), fmy(c.fs), fmy(c.fe), c.slip || 0, statusOf(t)[1], (t.deps || []).join(" "), t.notes]; }));
@@ -651,6 +662,7 @@
         case "expand": S.collapsed = {}; savePref(); rerender(); break;
         case "collapse": S.collapsed = {}; roots.forEach(function (t) { if ((kids[t.id] || []).length) S.collapsed[t.id] = 1; }); savePref(); rerender(); break;
         case "export": exportCsv(); break;
+        case "client-copy": clientCopy(); break;
       }
       return;
     }
@@ -701,7 +713,7 @@
   render();
   (function () { var g = document.getElementById("gantt"); if (!g) return; var R = range(); var off = (TODAY - R.lo) * S.zoom / 7 - S.zoom * 2; if (off > 0) g.scrollLeft = -off; })();
   (async function () {
-    var forced = /(^|#)edit$/.test(location.hash || "");
+    var forced = !DATA.snapshot && /(^|#)edit$/.test(location.hash || "");
     var cl = window.claude;
     if (!cl || !cl.use) { if (forced) { S.canEdit = true; S.edit = true; rerender(); } return; }
     try { var u = await cl.use("user"); S.canEdit = u ? !!((await u.canEdit()) || (await u.isOwner())) : false; } catch (e) { S.canEdit = false; }
