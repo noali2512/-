@@ -193,7 +193,7 @@
     if (S.canEdit) h += '<button class="btn ' + (S.edit ? "on" : "") + '" data-a="toggle-edit" aria-pressed="' + S.edit + '">' + (S.edit ? "סיום עריכה" : "מצב עריכה") + '</button>';
     h += '</div></header>';
     if (S.edit) {
-      h += '<div class="editbar"><span class="msg">' + (S.dirty ? "יש שינויים שטרם פורסמו. הלקוח יראה אותם רק אחרי פרסום." : "מצב עריכה: עדכון ישיר בטבלה. גרירה של ⋮⋮ משנה את מיקום השורה (שחרור באמצע שורת פרק מכניס לתוכו). לחיצה על השורה פותחת את כל השדות.") + '</span>' +
+      h += '<div class="editbar"><span class="msg">' + (S.dirty ? "יש שינויים שטרם פורסמו. הם נשמרים אוטומטית בדפדפן שלך" + (S.localAt ? " (נשמר " + pad(S.localAt.getHours()) + ":" + pad(S.localAt.getMinutes()) + ")" : "") + ", והצוות והלקוח יראו אותם אחרי פרסום." : "מצב עריכה: עדכון ישיר בטבלה. גרירה של ⋮⋮ משנה את מיקום השורה (שחרור באמצע שורת פרק מכניס לתוכו). לחיצה על השורה פותחת את כל השדות.") + '</span>' +
         (DATA.tasks.some(function (t) { return t.status === "supplier"; }) ? '<button class="btn sm" data-a="release-sup">שחרור המשימות שממתינות לספק</button>' : '') +
         '<button class="btn sm" data-a="project">פרטי פרויקט ואבני דרך</button><button class="btn sm" data-a="add-root">+ משימת על</button>' +
         (S.dirty ? '<button class="btn sm" data-a="discard">ביטול שינויים</button>' : '') +
@@ -525,7 +525,7 @@
     m.addEventListener("click", function (e) { if (e.target.closest("[data-ok]")) { m.remove(); fn(); } else if (e.target.closest("[data-no]") || e.target === m) m.remove(); });
     m.querySelector("[data-ok]").focus();
   }
-  function toast(msg) { var t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg; document.body.appendChild(t); setTimeout(function () { t.remove(); }, 3600); }
+  function toast(msg, ms) { var t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg; document.body.appendChild(t); setTimeout(function () { t.remove(); }, ms || 3600); }
 
   function diff() {
     var a = {}, b = {}, out = [], ren = 0, o2n = {};
@@ -621,13 +621,64 @@
     return "<!doctype html><html><head><meta charset=utf8><meta name=viewport content=\"width=device-width,initial-scale=1,viewport-fit=cover\"><style>" + RESET + "</style></head><body>" +
       HEAD + '<style id="app-style">' + CSS + '</style><div id="app"></div><script id="pmo-data" type="application/json">' + json + "<\/script><script id=\"app-src\">" + SRC + "<\/script></body></html>";
   }
-  function stashDraft() { try { if (S.dirty) sessionStorage.setItem("pmo-draft", JSON.stringify({ base: SAVED.savedAt, tasks: DATA.tasks, project: DATA.project })); else sessionStorage.removeItem("pmo-draft"); } catch (e) {} }
+  /* ---------- local autosave of unpublished edits ---------- */
+  var DKEY = "pmo-draft-v2";
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+  function dGet() { var s = null; try { s = localStorage.getItem(DKEY); } catch (e) {} if (!s) { try { s = sessionStorage.getItem(DKEY); } catch (e) {} } try { return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+  function dSet(o) { var s = JSON.stringify(o), ok = false; try { localStorage.setItem(DKEY, s); ok = true; } catch (e) {} try { sessionStorage.setItem(DKEY, s); ok = true; } catch (e) {} return ok; }
+  function dDel() { try { localStorage.removeItem(DKEY); } catch (e) {} try { sessionStorage.removeItem(DKEY); } catch (e) {} }
+  function draftObj(extra) { var o = { v: 2, at: new Date().toISOString(), base: { savedAt: SAVED.savedAt, tasks: SAVED.tasks, project: SAVED.project }, tasks: DATA.tasks, project: DATA.project }; if (extra) for (var k in extra) o[k] = extra[k]; return o; }
+  function stashDraft() { if (DATA.snapshot) return; if (S.dirty) { if (dSet(draftObj())) S.localAt = new Date(); } else { dDel(); S.localAt = null; } }
+  var TF = ["name", "notes", "start", "end", "owner", "status", "forecastEnd", "actualEnd"], PF = ["title", "client", "subtitle", "goLiveDate", "goLiveTask", "milestones"];
+  function countChanges(d) {
+    var b = {}, m = {}, n = 0;
+    d.base.tasks.forEach(function (t) { b[t.uid] = t; }); d.tasks.forEach(function (t) { m[t.uid] = t; });
+    d.tasks.forEach(function (t) { if (!b[t.uid] || !same(t, b[t.uid])) n++; });
+    d.base.tasks.forEach(function (t) { if (!m[t.uid]) n++; });
+    PF.forEach(function (f) { if (!same(d.project[f], d.base.project[f])) n++; });
+    return n;
+  }
+  /* Apply only what this viewer changed (relative to the version they started from) on top of the newer published data. */
+  function mergeDraft(d) {
+    var base = {}, mine = {}, live = {}, mineId2uid = {}, structLost = false;
+    d.base.tasks.forEach(function (t) { base[t.uid] = t; });
+    d.tasks.forEach(function (t) { mine[t.uid] = t; mineId2uid[t.id] = t.uid; });
+    DATA.tasks.forEach(function (t) { live[t.uid] = t; });
+    var liveSameStruct = d.base.tasks.length === DATA.tasks.length && d.base.tasks.every(function (t) { return live[t.uid] && live[t.uid].id === t.id; });
+    if (liveSameStruct) {
+      DATA.tasks = d.tasks.map(function (t) {
+        var r = clone(t), b = base[t.uid], l = live[t.uid];
+        if (b && l) TF.concat(["deps"]).forEach(function (f) { if (!same(l[f], b[f]) && same(r[f], b[f])) r[f] = clone(l[f]); });
+        return r;
+      });
+    } else {
+      var liveUid2id = {}; DATA.tasks.forEach(function (t) { liveUid2id[t.uid] = t.id; });
+      var mapDeps = function (deps) { return (deps || []).map(function (x) { var u = mineId2uid[x]; return (u && liveUid2id[u]) || x; }); };
+      d.tasks.forEach(function (t) {
+        var b = base[t.uid], l = live[t.uid];
+        if (b && l) {
+          TF.forEach(function (f) { if (t[f] !== b[f]) l[f] = t[f]; });
+          if (!same(t.deps, b.deps)) l.deps = mapDeps(t.deps);
+          if (t.id !== b.id) structLost = true;
+        } else if (!b) {
+          var pid = parentOf(t.id), pu = pid && mineId2uid[pid], lp = pu ? liveUid2id[pu] : null;
+          var c = clone(t); c.id = nextChildId(lp || null); c.deps = mapDeps(t.deps);
+          DATA.tasks.push(c); liveUid2id[c.uid] = c.id;
+        }
+      });
+      var del = {}; d.base.tasks.forEach(function (t) { if (!mine[t.uid]) del[t.uid] = 1; });
+      DATA.tasks = DATA.tasks.filter(function (t) { return !del[t.uid]; });
+    }
+    PF.forEach(function (f) { if (!same(d.project[f], d.base.project[f])) DATA.project[f] = clone(d.project[f]); });
+    return structLost;
+  }
   async function save() {
     if (!S.dirty || S.saving) return;
     var items = diff(), prevLog = DATA.log;
     DATA.log = [{ at: new Date().toISOString(), items: items }].concat(DATA.log || []).slice(0, 80);
     var prevSaved = DATA.savedAt; DATA.savedAt = new Date().toISOString();
-    try { sessionStorage.setItem("pmo-draft", JSON.stringify({ base: SAVED.savedAt, tasks: DATA.tasks, project: DATA.project, pending: DATA.savedAt })); } catch (e) {}
+    dSet(draftObj({ pending: DATA.savedAt }));
     S.saving = true; rerender();
     var art = null;
     try { art = window.claude && window.claude.use ? await window.claude.use("artifact") : null; } catch (e) {}
@@ -640,17 +691,20 @@
       if (code === "rate_limited") { fail("פורסמו שינויים רבים בזמן קצר. נסי שוב בעוד דקה."); return; }
       fail("הפרסום נכשל (" + (code || "שגיאה") + "). השינויים נשמרו בדף, אפשר לנסות שוב.");
     }
-    function fail(msg) { DATA.log = prevLog; DATA.savedAt = prevSaved; S.saving = false; toast(msg); rerender(); }
+    function fail(msg) { DATA.log = prevLog; DATA.savedAt = prevSaved; S.saving = false; stashDraft(); toast(msg); rerender(); }
   }
   function restoreDraft() {
-    try {
-      var d = JSON.parse(sessionStorage.getItem("pmo-draft") || "null"); if (!d) return;
-      if (d.pending && d.pending === DATA.savedAt) { sessionStorage.removeItem("pmo-draft"); return; }
-      if (JSON.stringify(d.tasks) === JSON.stringify(DATA.tasks) && (!d.project || JSON.stringify(d.project) === JSON.stringify(DATA.project))) { sessionStorage.removeItem("pmo-draft"); return; }
-      confirmBox("נמצאו שינויים שלא פורסמו", d.base === DATA.savedAt ? "יש שינויים מהעריכה הקודמת שלא פורסמו. לשחזר אותם?" : "יש שינויים שלא פורסמו, ובינתיים פורסמה גרסה חדשה. שחזור יחליף את רשימת המשימות בגרסת הטיוטה. לשחזר?", "שחזור", function () {
-        DATA.tasks = d.tasks; if (d.project) DATA.project = d.project; S.edit = true; touch(); rerender();
-      });
-    } catch (e) {}
+    var d = dGet(); if (!d) return;
+    if (!d.v || !d.base || !d.tasks) { dDel(); return; }
+    if (d.pending && d.pending === DATA.savedAt) { dDel(); return; }
+    if (same(d.tasks, DATA.tasks) && same(d.project, DATA.project)) { dDel(); return; }
+    var n = countChanges(d), msg;
+    if (!n) { dDel(); return; }
+    var cnt = n === 1 ? "שינוי אחד" : n + " שינויים";
+    if (d.base.savedAt === DATA.savedAt) { DATA.tasks = clone(d.tasks); DATA.project = clone(d.project); msg = "שוחזר " + cnt + " שלא פורסם."; }
+    else { var lost = mergeDraft(d); msg = "שוחזר " + cnt + " שלא פורסם, ומוזג עם העדכונים שפורסמו בינתיים." + (lost ? " שינויי סדר לא שוחזרו כי מבנה הגאנט עודכן בינתיים." : ""); }
+    S.edit = true; touch(); rerender();
+    toast(msg + " לחצי על פרסום כדי לשתף אותם.", 7000);
   }
   function clientCopy() {
     var copy = JSON.parse(JSON.stringify(SAVED));
@@ -682,7 +736,7 @@
       if (fk) { var n = document.querySelector('.ie[data-t="' + CSS_esc(fk[0]) + '"][data-k="' + fk[1] + '"]'); if (n) n.focus(); }
     }, 0);
   }
-  window.addEventListener("beforeunload", function (e) { if (S.dirty && !S.saving) { e.preventDefault(); e.returnValue = ""; } });
+
 
   /* ---------- Hebrew date fields ---------- */
   document.addEventListener("change", function (e) {
@@ -806,7 +860,7 @@
   (async function () {
     var forced = !DATA.snapshot && /(^|#)edit$/.test(location.hash || "");
     var cl = window.claude;
-    if (!cl || !cl.use) { if (forced) { S.canEdit = true; S.edit = true; rerender(); } return; }
+    if (!cl || !cl.use) { if (forced) { S.canEdit = true; S.edit = true; rerender(); restoreDraft(); } return; }
     try { var u = await cl.use("user"); S.canEdit = u ? !!((await u.canEdit()) || (await u.isOwner())) : false; } catch (e) { S.canEdit = false; }
     if (forced) { S.canEdit = true; S.edit = true; }
     try { S.dl = await cl.use("downloads"); } catch (e) { S.dl = null; }
