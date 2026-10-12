@@ -124,7 +124,7 @@ h1{margin:4px 0 0;font-size:26px;line-height:1.2;color:var(--band-text);font-wei
 .hdr{position:sticky;top:0;z-index:5;height:48px;border-bottom:1px solid var(--line)}
 .hdr .info{z-index:6;background:var(--surface);cursor:default;font-size:12px;color:var(--muted);font-weight:600}
 .hdr .tl{background-color:var(--surface)}
-.wk{direction:ltr;position:absolute;bottom:0;height:24px;font-size:11px;font-family:var(--mono);color:var(--muted);display:grid;place-items:center;border-left:1px solid var(--grid)}
+.wk{position:absolute;bottom:0;height:24px;font-size:11px;font-family:var(--mono);color:var(--muted);display:grid;place-items:center;border-left:1px solid var(--grid)}
 .wk.now{color:var(--today);font-weight:600}
 .ms{position:absolute;top:3px;transform:translateX(50%);display:flex;align-items:center;gap:3px;font-size:11px;color:var(--pink);white-space:nowrap;font-weight:600}
 .ms i{width:9px;height:9px;background:var(--pink);transform:rotate(45deg);display:inline-block;flex:none}
@@ -191,7 +191,7 @@ h1{margin:4px 0 0;font-size:26px;line-height:1.2;color:var(--band-text);font-wei
 .ie:focus{border-color:var(--accent);background:var(--surface);outline:none}
 .ie.miss{border:1px dashed var(--pink)}
 .ie.miss::placeholder{color:var(--pink)}
-input[type=date].ie{font-family:var(--mono);font-size:12px;padding:2px 4px}
+
 select.ie{padding:2px 4px;font-size:12px;cursor:pointer}
 select.st-done{color:var(--ok);font-weight:600}select.st-late{color:var(--bad);font-weight:600}select.st-doing{color:var(--accent);font-weight:600}
 .gantt.editing .info>span{overflow:visible}
@@ -230,3 +230,14 @@ select.st-supplier{color:var(--sup);font-weight:600}
 .msel-list .cnt{font-family:var(--mono);font-size:11px;color:var(--muted)}
 .msel-list input{accent-color:var(--accent);margin:0}
 .msel-foot{display:flex;gap:8px;align-items:center;justify-content:space-between;border-top:1px solid var(--grid);padding-top:6px}
+
+/* Hebrew date fields: dd.mm.yy text + calendar picker */
+.dpick{position:relative;display:flex;align-items:center;gap:2px;min-width:0;width:100%}
+.dpick input[data-date]{flex:1;min-width:0;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.dpick .ie[data-date]{font-size:12px;padding:2px 4px}
+.dbtn{flex:none;border:0;background:transparent;color:var(--muted);padding:2px 3px;border-radius:5px;display:grid;place-items:center}
+.dbtn:hover{color:var(--accent);background:var(--accent-2)}
+.dnat{position:absolute;inset-inline-start:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
+.f .dpick input[data-date],.msrow .dpick input[data-date],.rp-head .dpick input[data-date]{border:1px solid var(--line);background:var(--bg);border-radius:7px;padding:7px 9px}
+.rp-head .dpick{width:auto}
+.rp-head .dpick input[data-date]{width:110px;background:var(--surface);padding:5px 8px}

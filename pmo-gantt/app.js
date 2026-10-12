@@ -23,6 +23,26 @@
   function ds(n) { return new Date(n * 864e5).toISOString().slice(0, 10); }
   function fm(n) { if (n == null) return "—"; var d = new Date(n * 864e5); return pad(d.getUTCDate()) + "." + pad(d.getUTCMonth() + 1); }
   function fmy(n) { if (n == null) return "—"; var d = new Date(n * 864e5); return fm(n) + "." + String(d.getUTCFullYear()).slice(2); }
+  /* Hebrew-friendly date range: RLM keeps the start date on the right in RTL text */
+  function rg(a, b, f) { f = f || fm; return f(a) + "\u200F–\u200F" + f(b); }
+  function heDate(iso) { var n = dn(iso); return n == null ? "" : fmy(n); }
+  function heParse(s, fallbackYear) {
+    s = String(s || "").trim(); if (!s) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    var p = s.split(/[.\/\-\s]+/).filter(Boolean);
+    if (p.length < 2 || p.length > 3) return null;
+    var d = +p[0], m = +p[1], y = p[2] ? +p[2] : (fallbackYear || NOW.getFullYear());
+    if (y < 100) y += 2000;
+    if (!d || !m || !y) return null;
+    var t = new Date(Date.UTC(y, m - 1, d));
+    if (t.getUTCDate() !== d || t.getUTCMonth() !== m - 1) return null;
+    return t.toISOString().slice(0, 10);
+  }
+  var ICON_CAL = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+  function dateIn(attrs, iso) {
+    return '<span class="dpick"><input type="text" inputmode="numeric" autocomplete="off" data-date="1" placeholder="יום.חודש.שנה" value="' + esc(heDate(iso)) + '" ' + attrs + '>' +
+      '<button type="button" class="dbtn" data-cal="1" tabindex="-1" aria-label="בחירה מלוח שנה">' + ICON_CAL + '</button><input type="date" class="dnat" tabindex="-1" aria-hidden="true" value="' + esc(iso || "") + '"></span>';
+  }
   function pad(x) { return (x < 10 ? "0" : "") + x; }
   var NOW = new Date(); var TODAY = Date.UTC(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()) / 864e5;
   var TODAY_S = ds(TODAY);
@@ -232,7 +252,7 @@
       : '<div class="row hdr"><div class="info"><span></span><span>WBS</span><span>משימה</span><span class="c-own">אחראי</span><span>יעד / צפי</span><span class="c-st">מצב</span></div><div class="tl">';
     for (var w = 0; w < R.weeks; w++) {
       var a = R.lo + w * 7, cur = TODAY >= a && TODAY <= a + 6;
-      h += '<div class="wk' + (cur ? " now" : "") + '" style="right:' + (w * wk) + 'px;width:' + wk + 'px">' + (wk >= 80 ? fm(a) + "–" + fm(a + 6) : fm(a)) + '</div>';
+      h += '<div class="wk' + (cur ? " now" : "") + '" style="right:' + (w * wk) + 'px;width:' + wk + 'px">' + (wk >= 80 ? rg(a, a + 6) : fm(a)) + '</div>';
     }
     (DATA.project.milestones || []).forEach(function (m) {
       var v = dn(m.date); if (v == null) return;
@@ -255,8 +275,8 @@
         h += '<span><input class="ie' + (!t.owner && !ch ? ' miss' : '') + '" list="owners-all" data-t="' + tid + '" data-k="owner" value="' + esc(t.owner) + '" placeholder="' + (ch ? '' : 'חסר אחראי') + '" aria-label="אחראי ' + tid + '"></span>';
         if (ch) h += '<span class="dt">' + fm(c.bs) + '</span><span class="dt">' + fm(c.be) + '</span><span class="st"><span class="pill ' + st[0] + '">' + st[1] + '</span></span>';
         else {
-          h += '<span><input type="date" class="ie" data-t="' + tid + '" data-k="start" value="' + esc(t.start) + '" aria-label="התחלה ' + tid + '"></span>';
-          h += '<span><input type="date" class="ie" data-t="' + tid + '" data-k="end" value="' + esc(t.end) + '" aria-label="יעד ' + tid + '"></span>';
+          h += '<span>' + dateIn('class="ie" data-t="' + tid + '" data-k="start" aria-label="התחלה ' + tid + '"', t.start) + '</span>';
+          h += '<span>' + dateIn('class="ie" data-t="' + tid + '" data-k="end" aria-label="יעד ' + tid + '"', t.end) + '</span>';
           h += '<span><select class="ie st-' + (c.late ? 'late' : t.status) + '" data-t="' + tid + '" data-k="status" aria-label="סטטוס ' + tid + '">' + [["todo", "טרם החל"], ["doing", "בביצוע"], ["supplier", "תלוי בבחירת ספק"], ["done", "הושלם"]].map(function (o) { return '<option value="' + o[0] + '"' + (t.status === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") + '</select></span>';
         }
       } else {
@@ -267,14 +287,14 @@
       }
       h += '</div><div class="tl">';
       if (c.fs != null && c.fe != null) {
-        var right = x(c.fs), width = Math.max((c.fe - c.fs + 1) * day, 6), tip = esc(t.id + " " + t.name + " · " + fm(c.fs) + "–" + fm(c.fe) + (c.slip ? " (תוכנית: " + fm(c.bs) + "–" + fm(c.be) + ")" : ""));
+        var right = x(c.fs), width = Math.max((c.fe - c.fs + 1) * day, 6), tip = esc(t.id + " " + t.name + " · " + rg(c.fs, c.fe) + (c.slip ? " (תוכנית: " + rg(c.bs, c.be) + ")" : ""));
         if (ch) {
           h += '<div class="b sum' + (c.late ? " late" : "") + '" style="right:' + right + 'px;width:' + width + 'px" title="' + tip + '"><i style="width:' + Math.round(c.pct * 100) + '%"></i></div>';
           h += '<span class="pct" style="right:' + (right + width + 6) + 'px">' + Math.round(c.pct * 100) + '%</span>';
         } else {
           h += '<div class="b ' + barCls(t) + '" style="right:' + right + 'px;width:' + width + 'px" title="' + tip + '"></div>';
           if (c.late) h += '<div class="b over" style="right:' + (right + width) + 'px;width:' + ((TODAY - c.fe) * day) + 'px" title="איחור של ' + (TODAY - c.fe) + ' ימים"></div>';
-          if (c.slip && c.bs != null && c.be != null) h += '<div class="b base" style="right:' + x(c.bs) + 'px;width:' + Math.max((c.be - c.bs + 1) * day, 4) + 'px" title="תוכנית הבסיס: ' + fm(c.bs) + '–' + fm(c.be) + '"></div>';
+          if (c.slip && c.bs != null && c.be != null) h += '<div class="b base" style="right:' + x(c.bs) + 'px;width:' + Math.max((c.be - c.bs + 1) * day, 4) + 'px" title="תוכנית הבסיס: ' + rg(c.bs, c.be) + '"></div>';
         }
       }
       h += '</div></div>';
@@ -340,8 +360,8 @@
     if (!S.edit) {
       h += '<div><span class="pill ' + st[0] + '">' + st[1] + '</span></div><dl class="kv">' +
         '<dt>אחראי ביצוע</dt><dd>' + esc(t.owner || "—") + '</dd>' +
-        '<dt>תוכנית</dt><dd class="dt">' + fmy(c.bs) + ' – ' + fmy(c.be) + '</dd>' +
-        '<dt>צפי / בפועל</dt><dd class="dt">' + fmy(c.fs) + ' – ' + fmy(c.fe) + (c.slip ? ' (' + (c.slip > 0 ? "+" : "") + c.slip + ' ימים)' : "") + '</dd>' +
+        '<dt>תוכנית</dt><dd class="dt">' + rg(c.bs, c.be, fmy) + '</dd>' +
+        '<dt>צפי / בפועל</dt><dd class="dt">' + rg(c.fs, c.fe, fmy) + (c.slip ? ' (' + (c.slip > 0 ? "+" : "") + c.slip + ' ימים)' : "") + '</dd>' +
         (ch ? '<dt>התקדמות</dt><dd>' + Math.round(c.pct * 100) + '% (' + c.doneN + ' מתוך ' + c.leaves + ' משימות)</dd>' : '') +
         ((t.deps || []).length ? '<dt>תלויה ב-</dt><dd>' + t.deps.map(linkId).join(", ") + '</dd>' : '') +
         (dependents.length ? '<dt>משימות תלויות</dt><dd>' + dependents.map(linkId).join(", ") + '</dd>' : '') +
@@ -350,14 +370,14 @@
       h += fld("name", "שם המשימה", '<input id="e-name" value="' + esc(t.name) + '">');
       h += fld("owner", "אחראי ביצוע", '<input id="e-owner" list="owners" value="' + esc(t.owner) + '"><datalist id="owners">' + owners().map(function (o) { return '<option value="' + esc(o) + '">'; }).join("") + '</datalist>');
       if (!ch) {
-        h += '<div class="f2">' + fld("start", "התחלה (תוכנית)", '<input type="date" id="e-start" value="' + esc(t.start) + '">') + fld("end", "יעד (תוכנית)", '<input type="date" id="e-end" value="' + esc(t.end) + '">') + '</div>';
+        h += '<div class="f2">' + fld("start", "התחלה (תוכנית)", dateIn('id="e-start"', t.start)) + fld("end", "יעד (תוכנית)", dateIn('id="e-end"', t.end)) + '</div>';
         h += fld("status", "סטטוס", '<select id="e-status">' + [["todo", "טרם החל"], ["doing", "בביצוע"], ["supplier", "תלוי בבחירת ספק"], ["done", "הושלם"]].map(function (o) { return '<option value="' + o[0] + '"' + (t.status === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") + '</select>');
-        if (t.status === "done") h += fld("actualEnd", "תאריך סיום בפועל", '<input type="date" id="e-actualEnd" value="' + esc(t.actualEnd) + '">');
-        else h += fld("forecastEnd", "צפי סיום מעודכן (רק כשיש חריגה)", '<input type="date" id="e-forecastEnd" value="' + esc(t.forecastEnd) + '"><span class="hint">משימות שתלויות בה יידחו אוטומטית לפי הצפי.</span>');
+        if (t.status === "done") h += fld("actualEnd", "תאריך סיום בפועל", dateIn('id="e-actualEnd"', t.actualEnd));
+        else h += fld("forecastEnd", "צפי סיום מעודכן (רק כשיש חריגה)", dateIn('id="e-forecastEnd"', t.forecastEnd) + '<span class="hint">משימות שתלויות בה יידחו אוטומטית לפי הצפי.</span>');
         h += fld("deps", "תלויה במשימות (WBS, מופרד בפסיקים)", '<input id="e-deps" dir="ltr" value="' + esc((t.deps || []).join(", ")) + '">' + depWarn(t));
         if (c.shift > 0) h += '<div class="warnbox">המשימה נדחתה ב-' + c.shift + ' ימים בגלל עיכוב במשימה שהיא תלויה בה.</div>';
       } else {
-        h += '<dl class="kv"><dt>טווח (מחושב)</dt><dd class="dt">' + fmy(c.fs) + ' – ' + fmy(c.fe) + '</dd><dt>התקדמות</dt><dd>' + Math.round(c.pct * 100) + '% (' + c.doneN + '/' + c.leaves + ')</dd></dl><div class="hint">התאריכים והאחוז של משימת על מחושבים מתתי-המשימות.</div>';
+        h += '<dl class="kv"><dt>טווח (מחושב)</dt><dd class="dt">' + rg(c.fs, c.fe, fmy) + '</dd><dt>התקדמות</dt><dd>' + Math.round(c.pct * 100) + '% (' + c.doneN + '/' + c.leaves + ')</dd></dl><div class="hint">התאריכים והאחוז של משימת על מחושבים מתתי-המשימות.</div>';
       }
       h += fld("notes", "הערות (גלויות ללקוח)", '<textarea id="e-notes">' + esc(t.notes) + '</textarea>');
       h += '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-a="move-up">הזזה למעלה</button><button class="btn sm" data-a="move-down">הזזה למטה</button><button class="btn sm" data-a="add-child">+ תת-משימה</button><button class="btn sm danger" data-a="delete">מחיקת משימה</button></div>';
@@ -373,14 +393,14 @@
   }
   function projectDrawer() {
     var p = DATA.project;
-    function pf(k, l, type) { return '<div class="f"><label for="p-' + k + '">' + l + '</label><input id="p-' + k + '" data-pk="' + k + '" type="' + (type || "text") + '" value="' + esc(p[k] || "") + '"' + (k === "goLiveTask" ? ' dir="ltr"' : '') + '></div>'; }
+    function pf(k, l, type) { return '<div class="f"><label for="p-' + k + '">' + l + '</label>' + (type === "date" ? dateIn('id="p-' + k + '" data-pk="' + k + '"', p[k]) : '<input id="p-' + k + '" data-pk="' + k + '" type="text" value="' + esc(p[k] || "") + '"' + (k === "goLiveTask" ? ' dir="ltr"' : '') + '>') + '</div>'; }
     var h = '<header><div><div class="wbs">הגדרות</div><h2>פרטי פרויקט ואבני דרך</h2></div><button class="x" data-a="close" aria-label="סגירה">×</button></header><div class="body">';
     h += pf("title", "שם הפרויקט") + pf("client", "לקוח") + pf("subtitle", "תת-כותרת");
     h += '<div class="f2">' + pf("goLiveDate", "מועד Go-Live מתוכנן", "date") + pf("goLiveTask", "משימת Go-Live (WBS)") + '</div>';
     h += '<div class="hint">מועד ה-Go-Live הצפוי זז אוטומטית אם משימת ה-Go-Live נדחית.</div>';
     h += '<h3 style="margin:8px 0 0;font-size:14px;color:var(--head)">אבני דרך</h3>';
     (p.milestones || []).forEach(function (m, i) {
-      h += '<div class="msrow"><input type="date" data-mi="' + i + '" data-mk="date" value="' + esc(m.date) + '" aria-label="תאריך אבן דרך"><input data-mi="' + i + '" data-mk="label" value="' + esc(m.label) + '" aria-label="שם אבן דרך"><button class="btn sm danger" data-a="ms-del" data-i="' + i + '" aria-label="הסרת אבן דרך">הסרה</button></div>';
+      h += '<div class="msrow">' + dateIn('data-mi="' + i + '" data-mk="date" aria-label="תאריך אבן דרך"', m.date) + '<input data-mi="' + i + '" data-mk="label" value="' + esc(m.label) + '" aria-label="שם אבן דרך"><button class="btn sm danger" data-a="ms-del" data-i="' + i + '" aria-label="הסרת אבן דרך">הסרה</button></div>';
     });
     h += '<div><button class="btn sm" data-a="ms-add">+ אבן דרך</button></div></div>';
     return h;
@@ -389,8 +409,8 @@
   /* ---------- reports ---------- */
   function period() {
     var ref = dn(S.rpDate || TODAY_S);
-    if (S.rp === "weekly") { var a = ref - new Date(ref * 864e5).getUTCDay(); return { a: a, b: a + 6, n0: a + 7, n1: a + 13, label: "שבוע " + fm(a) + "–" + fmy(a + 6), next: "מתוכנן לשבוע הבא (" + fm(a + 7) + "–" + fm(a + 13) + ")" }; }
-    return { a: ref, b: ref, n0: ref + 1, n1: ref + 7, label: "יום " + fmy(ref), next: "יעד ב-7 הימים הבאים (" + fm(ref + 1) + "–" + fm(ref + 7) + ")" };
+    if (S.rp === "weekly") { var a = ref - new Date(ref * 864e5).getUTCDay(); return { a: a, b: a + 6, n0: a + 7, n1: a + 13, label: "שבוע " + fm(a) + "\u200F–\u200F" + fmy(a + 6), next: "מתוכנן לשבוע הבא (" + rg(a + 7, a + 13) + ")" }; }
+    return { a: ref, b: ref, n0: ref + 1, n1: ref + 7, label: "יום " + fmy(ref), next: "יעד ב-7 הימים הבאים (" + rg(ref + 1, ref + 7) + ")" };
   }
   function reportData() {
     var P = period(), L = leaves();
@@ -418,7 +438,7 @@
     var R = reportData(), pc = R.total ? Math.round(R.doneAll / R.total * 100) : 0;
     var h = '<div class="card rp-head"><div><h2 style="margin:0">' + (S.rp === "weekly" ? "סיכום שבועי" : "עדכון יומי") + ' · ' + R.P.label + '</h2><div class="note">התקדמות כוללת ' + pc + '% · ' + R.doneAll + ' מתוך ' + R.total + ' משימות הושלמו · ' + R.late.length + ' באיחור</div></div>' +
       '<div class="tools"><div class="tabs" role="group" aria-label="סוג הדוח"><button class="tab" data-a="rp-daily" aria-selected="' + (S.rp !== "weekly") + '">יומי</button><button class="tab" data-a="rp-weekly" aria-selected="' + (S.rp === "weekly") + '">שבועי</button></div>' +
-      '<input type="date" id="rp-date" value="' + esc(S.rpDate || TODAY_S) + '" aria-label="תאריך הדוח"><button class="btn primary sm" data-a="rp-copy">העתקת הדוח</button></div></div>';
+      dateIn('id="rp-date" aria-label="תאריך הדוח"', S.rpDate || TODAY_S) + '<button class="btn primary sm" data-a="rp-copy">העתקת הדוח</button></div></div>';
     h += '<div class="grid2"><div style="display:flex;flex-direction:column;gap:16px">' +
       listBlock("משימות שהושלמו", R.done, S.rp === "weekly" ? "לא הושלמו משימות בשבוע זה." : "לא הושלמו משימות ביום זה.", doneNote) +
       listBlock("משימות מתעכבות (עבר תאריך היעד)", R.late, "אין משימות באיחור.", lateNote) +
@@ -516,7 +536,7 @@
       if (!o) { out.push("נוספה משימה: " + n); return; }
       if (o.id !== t.id) ren++;
       if (o.status !== t.status) out.push(t.status === "done" ? "הושלמה: " + n : t.status === "doing" ? "בביצוע: " + n : t.status === "supplier" ? "ממתינה לבחירת ספק: " + n : "סטטוס עודכן: " + n);
-      if (o.end !== t.end || o.start !== t.start) out.push("עודכנו תאריכי התוכנית של " + n + ": " + fm(dn(t.start)) + "–" + fm(dn(t.end)));
+      if (o.end !== t.end || o.start !== t.start) out.push("עודכנו תאריכי התוכנית של " + n + ": " + rg(dn(t.start), dn(t.end)));
       if (o.forecastEnd !== t.forecastEnd && t.forecastEnd) out.push("צפי סיום מעודכן ל-" + n + ": " + fm(dn(t.forecastEnd)));
       if (o.owner !== t.owner) out.push("אחראי ביצוע ל-" + n + ": " + (t.owner || "—"));
       if (o.name !== t.name) out.push("שם משימה " + t.id + " עודכן");
@@ -663,6 +683,28 @@
     }, 0);
   }
   window.addEventListener("beforeunload", function (e) { if (S.dirty && !S.saving) { e.preventDefault(); e.returnValue = ""; } });
+
+  /* ---------- Hebrew date fields ---------- */
+  document.addEventListener("change", function (e) {
+    var el = e.target;
+    if (el.classList && el.classList.contains("dnat")) {
+      e.stopImmediatePropagation();
+      var txt = el.parentNode.querySelector("[data-date]");
+      if (txt) { txt.value = el.value; txt.dispatchEvent(new Event("change", { bubbles: true })); }
+      return;
+    }
+    if (!el.dataset || !el.dataset.date) return;
+    var prev = el.parentNode.querySelector(".dnat"), prevIso = prev ? prev.value : "";
+    var iso = heParse(el.value, prevIso ? +prevIso.slice(0, 4) : null);
+    if (iso === null) { e.stopImmediatePropagation(); toast("התאריך לא תקין. כתבי למשל 31.10.26"); el.value = heDate(prevIso); return; }
+    el.value = iso;
+  }, true);
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-cal]"); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    var nat = b.parentNode.querySelector(".dnat");
+    try { nat.showPicker(); } catch (x) { nat.focus(); nat.click(); }
+  }, true);
 
   /* ---------- events ---------- */
   document.addEventListener("click", function (e) {
