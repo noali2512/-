@@ -90,13 +90,14 @@
     var c = C[t.id];
     if (c.par) return c.done ? ["p-done", "הושלם"] : c.late ? ["p-late", c.lateN + " באיחור"] : c.doneN ? ["p-doing", Math.round(c.pct * 100) + "%"] : ["p-todo", "0%"];
     if (c.done) return ["p-done", "הושלם"];
+    if (t.status === "supplier") return c.late ? ["p-sup late", "ממתין לספק +" + (TODAY - c.fe)] : ["p-sup", "ממתין לספק"];
     if (c.late) return ["p-late", "באיחור " + (TODAY - c.fe) + " ימ׳"];
     if (c.slip > 0) return ["p-slip", "חריגה +" + c.slip];
     if (t.status === "doing") return ["p-doing", "בביצוע"];
     if (c.missing) return ["p-miss", "חסר תאריך"];
     return ["p-todo", "טרם החל"];
   }
-  function barCls(t) { var c = C[t.id]; return c.done ? "done" : c.late ? "late" : c.slip > 0 ? "slip" : t.status === "doing" ? "doing" : ""; }
+  function barCls(t) { var c = C[t.id]; return c.done ? "done" : t.status === "supplier" ? "sup" : c.late ? "late" : c.slip > 0 ? "slip" : t.status === "doing" ? "doing" : ""; }
 
   /* ---------- rows / filters ---------- */
   function filtering() { return !!(S.q || S.owner || S.filter !== "all"); }
@@ -108,6 +109,7 @@
       case "late": return c.late;
       case "soon": return c.soon;
       case "slip": return c.slip > 0 && !c.done;
+      case "sup": return !c.done && t.status === "supplier";
       case "open": return !c.done;
       case "done": return c.done;
     }
@@ -147,6 +149,7 @@
     h += '</div></header>';
     if (S.edit) {
       h += '<div class="editbar"><span class="msg">' + (S.dirty ? "יש שינויים שטרם פורסמו. הלקוח יראה אותם רק אחרי פרסום." : "מצב עריכה: עדכון ישיר בטבלה. גרירה של ⋮⋮ משנה את מיקום השורה (שחרור באמצע שורת פרק מכניס לתוכו). לחיצה על השורה פותחת את כל השדות.") + '</span>' +
+        (DATA.tasks.some(function (t) { return t.status === "supplier"; }) ? '<button class="btn sm" data-a="release-sup">שחרור המשימות שממתינות לספק</button>' : '') +
         '<button class="btn sm" data-a="project">פרטי פרויקט ואבני דרך</button><button class="btn sm" data-a="add-root">+ משימת על</button>' +
         (S.dirty ? '<button class="btn sm" data-a="discard">ביטול שינויים</button>' : '') +
         '<button class="btn primary sm" data-a="save" ' + (!S.dirty || S.saving ? "disabled" : "") + '>' + (S.saving ? "מפרסם…" : "פרסום השינויים") + '</button></div>';
@@ -169,11 +172,11 @@
     }
     h += '</div>';
     if (S.tab === "gantt") {
-      h += '<div class="chips" role="group" aria-label="סינון לפי מצב">' + [["all", "הכול"], ["open", "פתוחות"], ["late", "באיחור"], ["soon", "יעד בשבוע הקרוב"], ["slip", "צפי חריגה"], ["done", "הושלמו"]].map(function (x) {
+      h += '<div class="chips" role="group" aria-label="סינון לפי מצב">' + [["all", "הכול"], ["open", "פתוחות"], ["late", "באיחור"], ["soon", "יעד בשבוע הקרוב"], ["slip", "צפי חריגה"], ["sup", "תלוי בבחירת ספק"], ["done", "הושלמו"]].map(function (x) {
         return '<button class="chipbtn" data-f="' + x[0] + '" aria-pressed="' + (S.filter === x[0]) + '">' + x[1] + '</button>';
       }).join("") + '</div>';
       h += gantt();
-      h += '<div class="legend"><span><i class="sw" style="background:var(--ok)"></i>הושלם</span><span><i class="sw" style="background:var(--bad)"></i>באיחור (עבר תאריך היעד)</span><span><i class="sw" style="background:var(--warn)"></i>צפי חריגה מהתוכנית</span><span><i class="sw" style="background:var(--accent)"></i>בביצוע</span><span><i class="sw" style="background:var(--bar)"></i>מתוכנן</span><span><i class="sw" style="background:var(--bar-base);height:3px"></i>תוכנית הבסיס (כשיש סטייה)</span><span><i class="sw" style="background:var(--today);width:2px;height:12px"></i>היום</span><span><i class="sw" style="background:var(--pink);transform:rotate(45deg);width:8px;height:8px"></i>אבן דרך</span></div>';
+      h += '<div class="legend"><span><i class="sw" style="background:var(--ok)"></i>הושלם</span><span><i class="sw" style="background:var(--bad)"></i>באיחור (עבר תאריך היעד)</span><span><i class="sw" style="background:var(--warn)"></i>צפי חריגה מהתוכנית</span><span><i class="sw" style="background:var(--accent)"></i>בביצוע</span><span><i class="sw sw-sup"></i>תלוי בבחירת ספק</span><span><i class="sw" style="background:var(--bar)"></i>מתוכנן</span><span><i class="sw" style="background:var(--bar-base);height:3px"></i>תוכנית הבסיס (כשיש סטייה)</span><span><i class="sw" style="background:var(--today);width:2px;height:12px"></i>היום</span><span><i class="sw" style="background:var(--pink);transform:rotate(45deg);width:8px;height:8px"></i>אבן דרך</span></div>';
     } else if (S.tab === "overview") h += overview();
     else if (S.tab === "report") h += report();
     else h += attention();
@@ -229,7 +232,7 @@
         else {
           h += '<span><input type="date" class="ie" data-t="' + tid + '" data-k="start" value="' + esc(t.start) + '" aria-label="התחלה ' + tid + '"></span>';
           h += '<span><input type="date" class="ie" data-t="' + tid + '" data-k="end" value="' + esc(t.end) + '" aria-label="יעד ' + tid + '"></span>';
-          h += '<span><select class="ie st-' + (c.late ? 'late' : t.status) + '" data-t="' + tid + '" data-k="status" aria-label="סטטוס ' + tid + '">' + [["todo", "טרם החל"], ["doing", "בביצוע"], ["done", "הושלם"]].map(function (o) { return '<option value="' + o[0] + '"' + (t.status === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") + '</select></span>';
+          h += '<span><select class="ie st-' + (c.late ? 'late' : t.status) + '" data-t="' + tid + '" data-k="status" aria-label="סטטוס ' + tid + '">' + [["todo", "טרם החל"], ["doing", "בביצוע"], ["supplier", "תלוי בבחירת ספק"], ["done", "הושלם"]].map(function (o) { return '<option value="' + o[0] + '"' + (t.status === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") + '</select></span>';
         }
       } else {
       h += '<span class="nm" style="padding-inline-start:' + (6 + (r.lvl - 1) * 14) + 'px" title="' + esc(t.name) + '">' + esc(t.name) + '</span>';
@@ -291,6 +294,7 @@
     h += block("משימות באיחור", L.filter(function (t) { return C[t.id].late; }).sort(byFe), "אין משימות באיחור.", function (t) { return "יעד " + fmy(C[t.id].fe); });
     h += block("יעד ב-7 הימים הקרובים", L.filter(function (t) { return C[t.id].soon; }).sort(byFe), "אין משימות שמסתיימות בשבוע הקרוב.", function (t) { return "יעד " + fmy(C[t.id].fe); });
     h += '</div><div style="display:flex;flex-direction:column;gap:16px">';
+    h += block("ממתינות לבחירת ספק", L.filter(function (t) { return t.status === "supplier" && !C[t.id].done; }).sort(byFe), "אין משימות שממתינות לבחירת ספק.", function (t) { return "יעד " + fmy(C[t.id].fe); });
     h += block("צפי חריגה מהתוכנית", L.filter(function (t) { var c = C[t.id]; return c.slip > 0 && !c.done && !c.late; }).sort(byFe), "כל המשימות הפתוחות בתוכנית.", function (t) { var c = C[t.id]; return "תוכנית " + fm(c.be) + " · צפי " + fm(c.fe); });
     if (S.edit) {
       h += block("חסר אחראי ביצוע", L.filter(function (t) { return !t.owner && !C[t.id].done; }), "לכל המשימות הפתוחות מוגדר אחראי.", function (t) { return "יעד " + fmy(C[t.id].fe); });
@@ -322,7 +326,7 @@
       h += fld("owner", "אחראי ביצוע", '<input id="e-owner" list="owners" value="' + esc(t.owner) + '"><datalist id="owners">' + owners().map(function (o) { return '<option value="' + esc(o) + '">'; }).join("") + '</datalist>');
       if (!ch) {
         h += '<div class="f2">' + fld("start", "התחלה (תוכנית)", '<input type="date" id="e-start" value="' + esc(t.start) + '">') + fld("end", "יעד (תוכנית)", '<input type="date" id="e-end" value="' + esc(t.end) + '">') + '</div>';
-        h += fld("status", "סטטוס", '<select id="e-status">' + [["todo", "טרם החל"], ["doing", "בביצוע"], ["done", "הושלם"]].map(function (o) { return '<option value="' + o[0] + '"' + (t.status === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") + '</select>');
+        h += fld("status", "סטטוס", '<select id="e-status">' + [["todo", "טרם החל"], ["doing", "בביצוע"], ["supplier", "תלוי בבחירת ספק"], ["done", "הושלם"]].map(function (o) { return '<option value="' + o[0] + '"' + (t.status === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") + '</select>');
         if (t.status === "done") h += fld("actualEnd", "תאריך סיום בפועל", '<input type="date" id="e-actualEnd" value="' + esc(t.actualEnd) + '">');
         else h += fld("forecastEnd", "צפי סיום מעודכן (רק כשיש חריגה)", '<input type="date" id="e-forecastEnd" value="' + esc(t.forecastEnd) + '"><span class="hint">משימות שתלויות בה יידחו אוטומטית לפי הצפי.</span>');
         h += fld("deps", "תלויה במשימות (WBS, מופרד בפסיקים)", '<input id="e-deps" dir="ltr" value="' + esc((t.deps || []).join(", ")) + '">' + depWarn(t));
@@ -371,6 +375,7 @@
       done: L.filter(function (t) { var v = dn(t.actualEnd); return C[t.id].done && v != null && v >= P.a && v <= P.b; }).sort(function (a, b) { return a.actualEnd < b.actualEnd ? -1 : 1; }),
       late: L.filter(function (t) { return C[t.id].late; }).sort(byFe),
       slip: L.filter(function (t) { var c = C[t.id]; return c.slip > 0 && !c.done && !c.late; }).sort(byFe),
+      sup: L.filter(function (t) { return t.status === "supplier" && !C[t.id].done; }).sort(byFe),
       next: L.filter(function (t) { var c = C[t.id]; return !c.done && c.fe != null && c.fe >= P.n0 && c.fe <= P.n1; }).sort(byFe)
     };
   }
@@ -394,6 +399,7 @@
       listBlock("משימות מתעכבות (עבר תאריך היעד)", R.late, "אין משימות באיחור.", lateNote) +
       '</div><div style="display:flex;flex-direction:column;gap:16px">' +
       listBlock("צפי חריגה מהתוכנית", R.slip, "אין משימות עם צפי חריגה.", slipNote) +
+      listBlock("ממתינות לבחירת ספק", R.sup, "אין משימות שממתינות לבחירת ספק.", dueNote) +
       listBlock(R.P.next, R.next, "אין משימות בטווח זה.", dueNote) + '</div></div>';
     return h;
   }
@@ -403,7 +409,7 @@
     L.push(R.P.label);
     L.push("התקדמות כוללת: " + pc + "% (" + R.doneAll + " מתוך " + R.total + " משימות)");
     function sec(title, arr, fn) { L.push(""); L.push(title + " (" + arr.length + "):"); if (!arr.length) L.push("אין"); arr.forEach(function (t) { L.push("• " + t.id + " " + t.name + " – " + (t.owner || "ללא אחראי") + " – " + fn(t)); }); }
-    sec("הושלמו", R.done, doneNote); sec("מתעכבות", R.late, lateNote); sec("צפי חריגה מהתוכנית", R.slip, slipNote); sec(R.P.next, R.next, dueNote);
+    sec("הושלמו", R.done, doneNote); sec("מתעכבות", R.late, lateNote); sec("צפי חריגה מהתוכנית", R.slip, slipNote); sec("ממתינות לבחירת ספק", R.sup, dueNote); sec(R.P.next, R.next, dueNote);
     return L.join("\n");
   }
   function copyReport() {
@@ -484,7 +490,7 @@
       var o = a[t.uid || t.id], n = t.id + " " + t.name;
       if (!o) { out.push("נוספה משימה: " + n); return; }
       if (o.id !== t.id) ren++;
-      if (o.status !== t.status) out.push(t.status === "done" ? "הושלמה: " + n : t.status === "doing" ? "בביצוע: " + n : "סטטוס עודכן: " + n);
+      if (o.status !== t.status) out.push(t.status === "done" ? "הושלמה: " + n : t.status === "doing" ? "בביצוע: " + n : t.status === "supplier" ? "ממתינה לבחירת ספק: " + n : "סטטוס עודכן: " + n);
       if (o.end !== t.end || o.start !== t.start) out.push("עודכנו תאריכי התוכנית של " + n + ": " + fm(dn(t.start)) + "–" + fm(dn(t.end)));
       if (o.forecastEnd !== t.forecastEnd && t.forecastEnd) out.push("צפי סיום מעודכן ל-" + n + ": " + fm(dn(t.forecastEnd)));
       if (o.owner !== t.owner) out.push("אחראי ביצוע ל-" + n + ": " + (t.owner || "—"));
@@ -663,6 +669,12 @@
         case "collapse": S.collapsed = {}; roots.forEach(function (t) { if ((kids[t.id] || []).length) S.collapsed[t.id] = 1; }); savePref(); rerender(); break;
         case "export": exportCsv(); break;
         case "client-copy": clientCopy(); break;
+        case "release-sup": (function () {
+          var n = DATA.tasks.filter(function (t) { return t.status === "supplier"; }).length;
+          confirmBox("שחרור משימות", "להעביר " + n + " משימות מ\"תלוי בבחירת ספק\" ל\"טרם החל\"? אפשר לבדוק לפני הפרסום.", "שחרור", function () {
+            DATA.tasks.forEach(function (t) { if (t.status === "supplier") t.status = "todo"; }); touch(); rerender(); toast(n + " משימות שוחררו. לחצי על פרסום כדי לעדכן את כולם.");
+          });
+        })(); break;
       }
       return;
     }
