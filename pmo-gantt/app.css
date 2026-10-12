@@ -241,3 +241,15 @@ select.st-supplier{color:var(--sup);font-weight:600}
 .f .dpick input[data-date],.msrow .dpick input[data-date],.rp-head .dpick input[data-date]{border:1px solid var(--line);background:var(--bg);border-radius:7px;padding:7px 9px}
 .rp-head .dpick{width:auto}
 .rp-head .dpick input[data-date]{width:110px;background:var(--surface);padding:5px 8px}
+
+/* Excel import preview */
+.modal .card.imp{max-width:680px;max-height:86dvh;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.imp-sum{display:flex;flex-wrap:wrap;gap:8px}
+.imp-sum span{background:var(--surface-2);border-radius:8px;padding:6px 10px;font-size:13px}
+.imp-sum b{font-variant-numeric:tabular-nums;color:var(--head)}
+.imp-list{margin:0;padding:8px 22px 8px 8px;overflow:auto;max-height:42dvh;border:1px solid var(--line);border-radius:8px;font-size:13px;display:flex;flex-direction:column;gap:4px}
+.imp-list .wbs{margin-inline-end:4px}
+.imp-list s{color:var(--muted)}
+.imp-list.err{max-height:18dvh;color:var(--bad)}
+.imp-del{display:flex;gap:8px;align-items:center;color:var(--bad);font-weight:500}
+.card.imp h3{margin:0}

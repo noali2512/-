@@ -189,12 +189,13 @@
     h += '<header class="top"><div><div class="eyebrow">' + esc(p.client) + ' · ' + esc(p.subtitle) + '</div><h1>' + esc(p.title) + '</h1>' +
       '<div class="sub">' + (DATA.snapshot ? 'גרסת צפייה · הופקה ב-' + esc(fmtStamp(DATA.snapshot.at)) + ' · עדכון אחרון של התוכנית: ' + esc(fmtStamp(DATA.savedAt)) : 'נכון ל-' + fmy(TODAY) + ' · עדכון אחרון של התוכנית: ' + esc(fmtStamp(DATA.savedAt))) + '</div></div><div class="actions">';
     if (S.dl && S.canEdit && !DATA.snapshot) h += '<button class="btn" data-a="client-copy">הורדת גרסת לקוח</button>';
-    if (S.dl && !DATA.snapshot) h += '<button class="btn" data-a="export">ייצוא ל-CSV</button>';
+    if (S.dl && !DATA.snapshot) h += '<button class="btn" data-a="export-xlsx">ייצוא לאקסל</button>';
     if (S.canEdit) h += '<button class="btn ' + (S.edit ? "on" : "") + '" data-a="toggle-edit" aria-pressed="' + S.edit + '">' + (S.edit ? "סיום עריכה" : "מצב עריכה") + '</button>';
     h += '</div></header>';
     if (S.edit) {
       h += '<div class="editbar"><span class="msg">' + (S.dirty ? "יש שינויים שטרם פורסמו. הם נשמרים אוטומטית בדפדפן שלך" + (S.localAt ? " (נשמר " + pad(S.localAt.getHours()) + ":" + pad(S.localAt.getMinutes()) + ")" : "") + ", והצוות והלקוח יראו אותם אחרי פרסום." : "מצב עריכה: עדכון ישיר בטבלה. גרירה של ⋮⋮ משנה את מיקום השורה (שחרור באמצע שורת פרק מכניס לתוכו). לחיצה על השורה פותחת את כל השדות.") + '</span>' +
         (DATA.tasks.some(function (t) { return t.status === "supplier"; }) ? '<button class="btn sm" data-a="release-sup">שחרור המשימות שממתינות לספק</button>' : '') +
+        '<button class="btn sm" data-a="import">ייבוא מאקסל</button><input type="file" id="imp-file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>' +
         '<button class="btn sm" data-a="project">פרטי פרויקט ואבני דרך</button><button class="btn sm" data-a="add-root">+ משימת על</button>' +
         (S.dirty ? '<button class="btn sm" data-a="discard">ביטול שינויים</button>' : '') +
         '<button class="btn primary sm" data-a="save" ' + (!S.dirty || S.saving ? "disabled" : "") + '>' + (S.saving ? "מפרסם…" : "פרסום השינויים") + '</button></div>';
@@ -716,6 +717,220 @@
       .then(function () { toast(S.dirty ? "הקובץ נשמר. הוא כולל רק שינויים שפורסמו, לא את השינויים הפתוחים." : "הקובץ נשמר. אפשר לשלוח אותו ללקוח."); })
       .catch(function (e) { if (e && e.code !== "declined") toast("ההורדה לא הושלמה (" + (e.code || "שגיאה") + ")."); });
   }
+  /* ---------- Excel export / import (no external libraries) ---------- */
+  var CRC_T = (function () { var t = [], c; for (var n = 0; n < 256; n++) { c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  function crc32(u8) { var c = 0xFFFFFFFF; for (var i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+  function zipStore(files) {
+    var enc = new TextEncoder(), parts = [], cd = [], off = 0;
+    files.forEach(function (f) {
+      var nm = enc.encode(f.name), data = typeof f.data === "string" ? enc.encode(f.data) : f.data, crc = crc32(data), sz = data.length;
+      var lh = new Uint8Array(30 + nm.length), dv = new DataView(lh.buffer);
+      dv.setUint32(0, 0x04034b50, true); dv.setUint16(4, 20, true); dv.setUint16(6, 0x0800, true); dv.setUint16(12, 0x21, true);
+      dv.setUint32(14, crc, true); dv.setUint32(18, sz, true); dv.setUint32(22, sz, true); dv.setUint16(26, nm.length, true); lh.set(nm, 30);
+      var ch = new Uint8Array(46 + nm.length), cv = new DataView(ch.buffer);
+      cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint16(8, 0x0800, true); cv.setUint16(14, 0x21, true);
+      cv.setUint32(16, crc, true); cv.setUint32(20, sz, true); cv.setUint32(24, sz, true); cv.setUint16(28, nm.length, true); cv.setUint32(42, off, true); ch.set(nm, 46);
+      parts.push(lh, data); cd.push(ch); off += lh.length + sz;
+    });
+    var cds = cd.reduce(function (a, b) { return a + b.length; }, 0), e = new Uint8Array(22), ev = new DataView(e.buffer);
+    ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true); ev.setUint32(12, cds, true); ev.setUint32(16, off, true);
+    return new Blob(parts.concat(cd, [e]), { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  }
+  var XCOLS = [["id", "WBS"], ["name", "משימה"], ["notes", "הערות"], ["start", "תאריך התחלה"], ["end", "תאריך יעד"], ["deps", "תלות (WBS)"], ["owner", "גורם אחראי"], ["status", "סטטוס ביצוע"], ["forecastEnd", "צפי סיום"], ["actualEnd", "סיום בפועל"]];
+  var STATUS_HE = { todo: "טרם החל", doing: "בביצוע", supplier: "תלוי בבחירת ספק", done: "הושלם" };
+  function xe(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ""); }
+  function colL(i) { var s = ""; i++; while (i) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
+  function buildXlsx() {
+    build();
+    var rows = '<row r="1">' + XCOLS.map(function (c, i) { return '<c r="' + colL(i) + '1" t="inlineStr" s="2"><is><t>' + xe(c[1]) + '</t></is></c>'; }).join("") + "</row>";
+    DATA.tasks.forEach(function (t, ri) {
+      var r = ri + 2, par = (kids[t.id] || []).length > 0;
+      rows += '<row r="' + r + '">' + XCOLS.map(function (c, i) {
+        var k = c[0], ref = colL(i) + r, v = t[k];
+        if (k === "start" || k === "end" || k === "forecastEnd" || k === "actualEnd") return v ? '<c r="' + ref + '" s="1"><v>' + (dn(v) + 25569) + '</v></c>' : "";
+        if (k === "deps") v = (v || []).join(", ");
+        if (k === "status") v = STATUS_HE[v] || v;
+        return v ? '<c r="' + ref + '" t="inlineStr" s="' + (par && k === "name" ? 3 : 0) + '"><is><t xml:space="preserve">' + xe(v) + '</t></is></c>' : "";
+      }).join("") + "</row>";
+    });
+    var widths = [9, 60, 34, 13, 13, 14, 22, 16, 13, 13];
+    var sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView rightToLeft="1" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>' +
+      widths.map(function (w, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join("") + '</cols><sheetData>' + rows + '</sheetData><autoFilter ref="A1:' + colL(XCOLS.length - 1) + (DATA.tasks.length + 1) + '"/></worksheet>';
+    var styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="dd.mm.yy"/></numFmts><fonts count="3"><font><sz val="11"/><name val="Arial"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Arial"/></font><font><b/><sz val="11"/><name val="Arial"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF2B2F33"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+    return zipStore([
+      { name: "[Content_Types].xml", data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>' },
+      { name: "_rels/.rels", data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+      { name: "xl/workbook.xml", data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets><sheet name="תוכנית עבודה" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">\'תוכנית עבודה\'!$A$1:$' + colL(XCOLS.length - 1) + '$' + (DATA.tasks.length + 1) + '</definedName></definedNames></workbook>' },
+      { name: "xl/_rels/workbook.xml.rels", data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
+      { name: "xl/styles.xml", data: styles },
+      { name: "xl/worksheets/sheet1.xml", data: sheet }
+    ]);
+  }
+  function exportXlsx() {
+    var blob; try { blob = buildXlsx(); } catch (e) { toast("הייצוא נכשל."); return; }
+    S.dl.save({ filename: "גאנט PDI " + TODAY_S + ".xlsx", data: blob }).catch(function (e) {
+      if (!e || e.code === "declined") return;
+      if (e.code === "extension_not_enabled" || e.code === "rejected_extension") { toast("קובצי אקסל חסומים בתצוגה זו. יורד קובץ CSV במקום."); exportCsv(); return; }
+      toast("הייצוא לא הושלם (" + (e.code || "שגיאה") + ").");
+    });
+  }
+
+  async function unzipRead(buf) {
+    var u8 = new Uint8Array(buf), dv = new DataView(buf), files = {}, e = -1;
+    for (var i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { e = i; break; }
+    if (e < 0) throw new Error("notzip");
+    var n = dv.getUint16(e + 10, true), off = dv.getUint32(e + 16, true), dec = new TextDecoder();
+    for (var k = 0; k < n; k++) {
+      if (dv.getUint32(off, true) !== 0x02014b50) throw new Error("notzip");
+      var method = dv.getUint16(off + 10, true), csz = dv.getUint32(off + 20, true), nl = dv.getUint16(off + 28, true), xl = dv.getUint16(off + 30, true), cl = dv.getUint16(off + 32, true), lho = dv.getUint32(off + 42, true);
+      var name = dec.decode(u8.subarray(off + 46, off + 46 + nl)), st = lho + 30 + dv.getUint16(lho + 26, true) + dv.getUint16(lho + 28, true);
+      files[name] = { method: method, data: u8.subarray(st, st + csz) };
+      off += 46 + nl + xl + cl;
+    }
+    return {
+      text: async function (name) {
+        var f = files[name]; if (!f) return null;
+        var data = f.data;
+        if (f.method === 8) { if (typeof DecompressionStream === "undefined") throw new Error("nodecomp"); data = new Uint8Array(await new Response(new Blob([f.data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer()); }
+        else if (f.method !== 0) throw new Error("method");
+        return dec.decode(data);
+      }
+    };
+  }
+  function xmlDoc(s) { return new DOMParser().parseFromString(s, "application/xml"); }
+  function tags(el, name) { return Array.prototype.slice.call(el.getElementsByTagNameNS("*", name)); }
+  async function readXlsxSheets(buf) {
+    var z = await unzipRead(buf), wb = await z.text("xl/workbook.xml");
+    if (!wb) throw new Error("notxlsx");
+    var rels = xmlDoc(await z.text("xl/_rels/workbook.xml.rels") || "<r/>"), relMap = {};
+    tags(rels, "Relationship").forEach(function (r) { relMap[r.getAttribute("Id")] = r.getAttribute("Target"); });
+    var ssx = await z.text("xl/sharedStrings.xml"), strings = [];
+    if (ssx) tags(xmlDoc(ssx), "si").forEach(function (si) { strings.push(tags(si, "t").filter(function (t) { return t.parentNode.localName !== "rPh"; }).map(function (t) { return t.textContent; }).join("")); });
+    var out = [];
+    for (var sh of tags(xmlDoc(wb), "sheet")) {
+      var rid = sh.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id") || sh.getAttribute("r:id");
+      var target = relMap[rid] || ""; target = target.charAt(0) === "/" ? target.slice(1) : "xl/" + target.replace(/^\.\//, "");
+      var sx = await z.text(target); if (!sx) continue;
+      var grid = [];
+      tags(xmlDoc(sx), "row").forEach(function (row) {
+        var rn = +row.getAttribute("r") - 1, arr = grid[rn] = [], ci = 0;
+        tags(row, "c").forEach(function (c) {
+          var ref = c.getAttribute("r"); if (ref) { var L = ref.replace(/\d+/g, ""), x = 0; for (var q = 0; q < L.length; q++) x = x * 26 + L.charCodeAt(q) - 64; ci = x - 1; }
+          var t = c.getAttribute("t"), v = tags(c, "v")[0], val;
+          if (t === "s") val = strings[+(v && v.textContent)];
+          else if (t === "inlineStr") val = tags(c, "t").map(function (x) { return x.textContent; }).join("");
+          else if (t === "str" || t === "e") val = v ? v.textContent : "";
+          else if (t === "b") val = v && v.textContent === "1";
+          else val = v ? Number(v.textContent) : "";
+          arr[ci++] = val;
+        });
+      });
+      out.push({ name: sh.getAttribute("name"), grid: grid });
+    }
+    return out;
+  }
+  var HDR = {
+    id: ["wbs", "מס'", "מספר"], name: ["משימה", "שם משימה", "שם המשימה"], notes: ["הערות", "הערה"],
+    start: ["תאריך התחלה", "התחלה", "התחלה (תוכנית)"], end: ["תאריך יעד", "יעד", "יעד (תוכנית)"],
+    deps: ["תלות (wbs)", "תלות", "תלויות"], owner: ["גורם אחראי", "אחראי", "אחראי ביצוע", "אחראים"],
+    status: ["סטטוס ביצוע", "סטטוס", "מצב"], forecastEnd: ["צפי סיום", "צפי סיום מעודכן"], actualEnd: ["סיום בפועל", "תאריך סיום בפועל"]
+  };
+  var STATUS_IN = { "טרם החל": "todo", "לא התחיל": "todo", "בביצוע": "doing", "תלוי בבחירת ספק": "supplier", "ממתין לספק": "supplier", "הושלם": "done", "בוצע": "done" };
+  function normH(s) { return String(s == null ? "" : s).replace(/\s+/g, " ").trim().toLowerCase(); }
+  function cellDate(v, fy) { if (v === "" || v == null) return ""; if (typeof v === "number") return v > 20000 && v < 80000 ? ds(Math.round(v) - 25569) : null; return heParse(String(v), fy); }
+  function planImport(sheets) {
+    var sheet = null, hr = -1, map = {};
+    sheets.some(function (s) {
+      for (var r = 0; r < Math.min(s.grid.length, 30); r++) {
+        var row = s.grid[r] || [], m = {};
+        row.forEach(function (v, i) { var h = normH(v); Object.keys(HDR).forEach(function (k) { if (m[k] == null && HDR[k].indexOf(h) >= 0) m[k] = i; }); });
+        if (m.id != null && (m.name != null || m.owner != null || m.end != null)) { sheet = s; hr = r; map = m; return true; }
+      }
+      return false;
+    });
+    if (!sheet) return { error: "לא נמצאה בקובץ שורת כותרות עם עמודות WBS ומשימה." };
+    var P = { updates: [], adds: [], errors: [], skipped: 0, seen: {}, cols: Object.keys(map) }, byIdNow = {};
+    DATA.tasks.forEach(function (t) { byIdNow[t.id] = t; });
+    for (var r = hr + 1; r < sheet.grid.length; r++) {
+      var row = sheet.grid[r]; if (!row) continue;
+      var raw = row[map.id], id = typeof raw === "number" ? String(raw) : String(raw == null ? "" : raw).trim();
+      var line = "שורה " + (r + 1);
+      if (!id) { if (row.some(function (v) { return v !== "" && v != null; })) P.skipped++; continue; }
+      if (!/^\d+(\.\d+)*$/.test(id)) { P.errors.push(line + ": מספר WBS לא תקין (" + id + ")"); continue; }
+      if (P.seen[id]) { P.errors.push(line + ": WBS " + id + " מופיע פעמיים בקובץ, השורה דולגה"); continue; }
+      P.seen[id] = 1;
+      var cur = byIdNow[id], fy = cur && cur.end ? +cur.end.slice(0, 4) : null, vals = {}, bad = false;
+      Object.keys(map).forEach(function (k) {
+        if (k === "id") return;
+        var v = row[map[k]];
+        if (v === "" || v == null) return;
+        if (k === "start" || k === "end" || k === "forecastEnd" || k === "actualEnd") { var d = cellDate(v, fy); if (d === null) { P.errors.push(line + " (" + id + "): תאריך לא תקין בעמודה " + XCOLS.filter(function (c) { return c[0] === k; })[0][1]); bad = true; return; } vals[k] = d; }
+        else if (k === "status") { var s = STATUS_IN[String(v).trim()]; if (!s) { P.errors.push(line + " (" + id + "): סטטוס לא מוכר \"" + v + "\""); bad = true; return; } vals[k] = s; }
+        else if (k === "deps") vals[k] = String(v).split(/[,;\s]+/).map(function (x) { return x.trim(); }).filter(function (x) { return x && x !== id; });
+        else vals[k] = String(v).trim();
+      });
+      if (bad) continue;
+      if (cur) {
+        var ch = {};
+        Object.keys(vals).forEach(function (k) { if (!same(vals[k], cur[k])) ch[k] = [cur[k], vals[k]]; });
+        if (Object.keys(ch).length) P.updates.push({ id: id, name: cur.name, ch: ch });
+      } else P.adds.push({ id: id, vals: vals });
+    }
+    P.missing = DATA.tasks.filter(function (t) { return !P.seen[t.id]; }).map(function (t) { return t.id; });
+    return P;
+  }
+  var FLD_HE = { name: "שם", notes: "הערות", start: "התחלה", end: "יעד", deps: "תלויות", owner: "אחראי", status: "סטטוס", forecastEnd: "צפי סיום", actualEnd: "סיום בפועל" };
+  function showVal(k, v) { if (v == null || v === "" || (Array.isArray(v) && !v.length)) return "—"; if (k === "status") return STATUS_HE[v] || v; if (Array.isArray(v)) return v.join(", "); if (/start|end|End/.test(k)) return heDate(v); return String(v); }
+  function importPreview(P, fileName) {
+    var m = document.createElement("div"); m.className = "modal";
+    var lines = [];
+    P.updates.forEach(function (u) { Object.keys(u.ch).forEach(function (k) { lines.push('<li><span class="wbs">' + esc(u.id) + '</span> ' + esc(FLD_HE[k]) + ': <s>' + esc(showVal(k, u.ch[k][0])) + '</s> ← <b>' + esc(showVal(k, u.ch[k][1])) + '</b></li>'); }); });
+    P.adds.forEach(function (a) { lines.push('<li><span class="wbs">' + esc(a.id) + '</span> <b>משימה חדשה:</b> ' + esc(a.vals.name || "ללא שם") + '</li>'); });
+    var h = '<div class="card imp" role="dialog" aria-modal="true"><h2>ייבוא מאקסל · ' + esc(fileName) + '</h2>' +
+      '<div class="imp-sum"><span><b>' + P.updates.length + '</b> משימות יתעדכנו</span><span><b>' + P.adds.length + '</b> משימות חדשות</span><span><b>' + P.errors.length + '</b> שורות עם שגיאה</span></div>';
+    if (lines.length) h += '<ul class="imp-list">' + lines.slice(0, 400).join("") + (lines.length > 400 ? '<li>ועוד ' + (lines.length - 400) + ' שינויים</li>' : '') + '</ul>';
+    else h += '<div class="note">לא נמצאו הבדלים בין הקובץ לגאנט.</div>';
+    if (P.errors.length) h += '<h3>שורות שלא ייובאו</h3><ul class="imp-list err">' + P.errors.slice(0, 50).map(function (e) { return '<li>' + esc(e) + '</li>'; }).join("") + '</ul>';
+    if (P.missing.length) h += '<label class="imp-del"><input type="checkbox" id="imp-del"> מחיקת ' + P.missing.length + ' משימות שקיימות בגאנט ולא מופיעות בקובץ</label>';
+    h += '<div class="note">תאים ריקים בקובץ לא משנים את הערך הקיים. השינויים ייכנסו כטיוטה, ויתפרסמו רק אחרי לחיצה על "פרסום השינויים".</div>' +
+      '<div class="row-btns"><button class="btn primary" data-ok' + (lines.length || P.missing.length ? "" : " disabled") + '>החלת השינויים</button><button class="btn" data-no>ביטול</button></div></div>';
+    m.innerHTML = h; document.body.appendChild(m);
+    m.addEventListener("click", function (e) {
+      if (e.target.closest("[data-ok]")) { var del = m.querySelector("#imp-del"); applyImport(P, del && del.checked); m.remove(); }
+      else if (e.target.closest("[data-no]") || e.target === m) m.remove();
+    });
+  }
+  function applyImport(P, doDelete) {
+    var byIdNow = {}; DATA.tasks.forEach(function (t) { byIdNow[t.id] = t; });
+    P.updates.forEach(function (u) { var t = byIdNow[u.id]; if (!t) return; Object.keys(u.ch).forEach(function (k) { t[k] = clone(u.ch[k][1]); }); if (t.status === "done" && !t.actualEnd) t.actualEnd = t.end || TODAY_S; if (t.status !== "done" && u.ch.status) t.actualEnd = u.ch.actualEnd ? t.actualEnd : ""; });
+    P.adds.forEach(function (a) {
+      var t = { uid: newUid(), id: a.id, name: "משימה חדשה", notes: "", start: "", end: "", deps: [], owner: "", status: "todo", forecastEnd: "", actualEnd: "" };
+      Object.keys(a.vals).forEach(function (k) { t[k] = clone(a.vals[k]); });
+      if (t.status === "done" && !t.actualEnd) t.actualEnd = t.end || TODAY_S;
+      DATA.tasks.push(t);
+    });
+    var removed = 0;
+    if (doDelete && P.missing.length) {
+      var del = {}; P.missing.forEach(function (id) { del[id] = 1; });
+      DATA.tasks = DATA.tasks.filter(function (t) { if (del[t.id]) { removed++; return false; } return true; });
+      DATA.tasks.forEach(function (t) { t.deps = (t.deps || []).filter(function (d) { return !del[d]; }); });
+    }
+    S.edit = true; touch(); rerender();
+    toast("הייבוא הוחל: " + P.updates.length + " עודכנו, " + P.adds.length + " נוספו" + (removed ? ", " + removed + " נמחקו" : "") + ". לבדיקה ולפרסום.", 6000);
+  }
+  async function importFile(file) {
+    if (!file) return;
+    if (!/\.xlsx$/i.test(file.name)) { toast("יש לבחור קובץ אקסל בפורמט ‎.xlsx"); return; }
+    try {
+      var sheets = await readXlsxSheets(await file.arrayBuffer());
+      var P = planImport(sheets);
+      if (P.error) { toast(P.error, 6000); return; }
+      importPreview(P, file.name);
+    } catch (e) {
+      toast(e && e.message === "nodecomp" ? "הדפדפן הזה לא תומך בקריאת קובצי אקסל. נסי בדפדפן Chrome או Edge מעודכן." : "לא הצלחתי לקרוא את הקובץ. ודאי שזה קובץ אקסל תקין (.xlsx).", 6000);
+    }
+  }
+
   function exportCsv() {
     var head = ["WBS", "משימה", "אחראי", "התחלה (תוכנית)", "יעד (תוכנית)", "התחלה (צפי)", "סיום (צפי/בפועל)", "סטייה (ימים)", "מצב", "תלויות", "הערות"];
     var lines = [head].concat(DATA.tasks.map(function (t) { var c = C[t.id]; return [t.id, t.name, t.owner, fmy(c.bs), fmy(c.be), fmy(c.fs), fmy(c.fe), c.slip || 0, statusOf(t)[1], (t.deps || []).join(" "), t.notes]; }));
@@ -790,6 +1005,8 @@
         case "expand": S.collapsed = {}; savePref(); rerender(); break;
         case "collapse": S.collapsed = {}; roots.forEach(function (t) { if ((kids[t.id] || []).length) S.collapsed[t.id] = 1; }); savePref(); rerender(); break;
         case "export": exportCsv(); break;
+        case "export-xlsx": exportXlsx(); break;
+        case "import": (function () { var f = document.getElementById("imp-file"); if (f) { f.value = ""; f.click(); } })(); break;
         case "client-copy": clientCopy(); break;
         case "own-toggle": S.ownOpen = !S.ownOpen; S.ownQ = ""; rerender(); if (S.ownOpen) { var oq = document.getElementById("own-q"); if (oq) oq.focus(); } break;
         case "own-clear": S.owners = []; rerender(); break;
@@ -827,6 +1044,7 @@
       rerender(); return;
     }
     if (id === "zoom") { S.zoom = +e.target.value; savePref(); rerender(); return; }
+    if (id === "imp-file") { importFile(e.target.files && e.target.files[0]); return; }
     if (id === "rp-date") { S.rpDate = e.target.value || TODAY_S; rerender(); return; }
     var ds_ = e.target.dataset || {};
     if (ds_.t && ds_.k && byId[ds_.t]) { inlineEdit(byId[ds_.t], ds_.k, e.target.value); return; }
