@@ -13,7 +13,7 @@
 
   var S = {
     tab: "gantt", edit: false, canEdit: false, dl: null, sel: null,
-    q: "", owner: "", filter: "all", zoom: 84, collapsed: {}, dirty: false, saving: false, rp: "daily", rpDate: ""
+    q: "", owners: [], ownOpen: false, ownQ: "", filter: "all", zoom: 84, collapsed: {}, dirty: false, saving: false, rp: "daily", rpDate: ""
   };
   try { var pref = JSON.parse(localStorage.getItem("pmo-pref") || "{}"); if (pref.zoom) S.zoom = pref.zoom; if (pref.collapsed) S.collapsed = pref.collapsed; if (pref.tab) S.tab = pref.tab; } catch (e) {}
   function savePref() { try { localStorage.setItem("pmo-pref", JSON.stringify({ zoom: S.zoom, collapsed: S.collapsed, tab: S.tab })); } catch (e) {} }
@@ -100,11 +100,15 @@
   function barCls(t) { var c = C[t.id]; return c.done ? "done" : t.status === "supplier" ? "sup" : c.late ? "late" : c.slip > 0 ? "slip" : t.status === "doing" ? "doing" : ""; }
 
   /* ---------- rows / filters ---------- */
-  function filtering() { return !!(S.q || S.owner || S.filter !== "all"); }
+  function filtering() { return !!(S.q || S.owners.length || S.filter !== "all"); }
   function matches(t) {
     var c = C[t.id], q = S.q.trim();
     if (q && t.name.indexOf(q) < 0 && t.id.indexOf(q) !== 0 && (t.owner || "").indexOf(q) < 0) return false;
-    if (S.owner && t.owner !== S.owner) return false;
+    if (S.owners.length) {
+      var ns = splitOwners(t.owner);
+      var hit = ns.length ? ns.some(function (n) { return S.owners.indexOf(n) >= 0; }) : S.owners.indexOf("__none") >= 0;
+      if (!hit) return false;
+    }
     switch (S.filter) {
       case "late": return c.late;
       case "soon": return c.soon;
@@ -127,6 +131,27 @@
     }
     roots.forEach(function (t) { out = out.concat(walk(t, 1)); });
     return out;
+  }
+  /* "דני, יניב" / "בוחן/משאבי אנוש" -> separate people; "מנהל/ת" stays one word */
+  function splitOwners(s) { return String(s || "").split(/\s*[,;+]\s*|\s*\/(?![תה](?:\s|$|[,)]))\s*|\s+&\s+/).map(function (x) { return x.trim(); }).filter(Boolean); }
+  function people() {
+    var m = {}, none = 0;
+    leaves().forEach(function (t) { var ns = splitOwners(t.owner); if (!ns.length) none++; ns.forEach(function (n) { m[n] = (m[n] || 0) + 1; }); });
+    return { list: Object.keys(m).sort(function (a, b) { return a.localeCompare(b, "he"); }).map(function (n) { return [n, m[n]]; }), none: none };
+  }
+  function ownerFilter() {
+    var P = people(), sel = S.owners, q = S.ownQ.trim();
+    var label = !sel.length ? "כל האחראים" : sel.length <= 2 ? sel.map(function (n) { return n === "__none" ? "ללא אחראי" : n; }).join(", ") : sel.length + " אחראים נבחרו";
+    var h = '<div class="msel"><button class="msel-btn' + (sel.length ? " on" : "") + '" data-a="own-toggle" aria-expanded="' + S.ownOpen + '" aria-haspopup="true">' + esc(label) + ' <span aria-hidden="true">▾</span></button>';
+    if (S.ownOpen) {
+      h += '<div class="msel-pop" role="dialog" aria-label="סינון לפי אחראים"><input type="search" id="own-q" placeholder="חיפוש אחראי" value="' + esc(S.ownQ) + '" aria-label="חיפוש אחראי"><div class="msel-list">';
+      var rows = P.list.filter(function (r) { return !q || r[0].indexOf(q) >= 0; });
+      rows.forEach(function (r) { h += '<label><input type="checkbox" data-own="' + esc(r[0]) + '"' + (sel.indexOf(r[0]) >= 0 ? " checked" : "") + '><span>' + esc(r[0]) + '</span><span class="cnt">' + r[1] + '</span></label>'; });
+      if (!q && P.none) h += '<label><input type="checkbox" data-own="__none"' + (sel.indexOf("__none") >= 0 ? " checked" : "") + '><span>ללא אחראי</span><span class="cnt">' + P.none + '</span></label>';
+      if (!rows.length && q) h += '<div class="note" style="padding:8px">לא נמצא אחראי בשם הזה.</div>';
+      h += '</div><div class="msel-foot"><span class="note">מוצגות משימות של כל אחד מהנבחרים</span><button class="btn sm" data-a="own-clear">ניקוי</button></div></div>';
+    }
+    return h + '</div>';
   }
   function owners() { var m = {}; DATA.tasks.forEach(function (t) { if (t.owner) m[t.owner] = 1; }); return Object.keys(m).sort(); }
 
@@ -166,7 +191,7 @@
       tab("gantt", "גאנט") + tab("overview", "תמונת מצב") + tab("attn", "לטיפול" + (late ? " (" + late + ")" : "")) + tab("report", "דוח יומי / שבועי") + '</div>';
     if (S.tab === "gantt") {
       h += '<div class="tools"><input type="search" id="q" placeholder="חיפוש משימה, WBS או אחראי" value="' + esc(S.q) + '" aria-label="חיפוש">' +
-        '<select id="own" aria-label="סינון לפי אחראי"><option value="">כל האחראים</option>' + owners().map(function (o) { return '<option' + (o === S.owner ? " selected" : "") + '>' + esc(o) + '</option>'; }).join("") + '</select>' +
+        ownerFilter() +
         '<select id="zoom" aria-label="רוחב שבוע">' + [[56, "תצוגה צפופה"], [84, "תצוגה רגילה"], [128, "תצוגה מורחבת"]].map(function (z) { return '<option value="' + z[0] + '"' + (S.zoom === z[0] ? " selected" : "") + '>' + z[1] + '</option>'; }).join("") + '</select>' +
         '<button class="btn sm" data-a="expand">פתיחת הכול</button><button class="btn sm" data-a="collapse">כיווץ לפרקים</button></div>';
     }
@@ -643,12 +668,13 @@
   document.addEventListener("click", function (e) {
     if (e.target.closest(".modal")) return;
     if (e.target.closest(".row .ie") || e.target.closest(".drag")) return;
+    if (S.ownOpen && !e.target.closest(".msel")) { S.ownOpen = false; rerender(); }
     var el;
     if ((el = e.target.closest("[data-tw]"))) { var id = el.getAttribute("data-tw"); if (S.collapsed[id]) delete S.collapsed[id]; else S.collapsed[id] = 1; savePref(); rerender(); return; }
     if ((el = e.target.closest("[data-done]"))) { toggleDone(el.getAttribute("data-done")); return; }
     if ((el = e.target.closest("[data-tab]"))) { S.tab = el.getAttribute("data-tab"); savePref(); render(); return; }
     if ((el = e.target.closest("[data-f]"))) { S.filter = el.getAttribute("data-f"); rerender(); return; }
-    if ((el = e.target.closest("[data-open]"))) { e.preventDefault(); S.sel = el.getAttribute("data-open"); if (!e.target.closest(".drawer")) { S.tab = "gantt"; var p = parentOf(S.sel); while (p) { delete S.collapsed[p]; p = parentOf(p); } S.filter = "all"; S.q = ""; S.owner = ""; render(); scrollToSel(); } else { rerender(); } return; }
+    if ((el = e.target.closest("[data-open]"))) { e.preventDefault(); S.sel = el.getAttribute("data-open"); if (!e.target.closest(".drawer")) { S.tab = "gantt"; var p = parentOf(S.sel); while (p) { delete S.collapsed[p]; p = parentOf(p); } S.filter = "all"; S.q = ""; S.owners = []; render(); scrollToSel(); } else { rerender(); } return; }
     if ((el = e.target.closest("[data-a]"))) {
       switch (el.getAttribute("data-a")) {
         case "toggle-edit": S.edit = !S.edit; rerender(); break;
@@ -669,6 +695,8 @@
         case "collapse": S.collapsed = {}; roots.forEach(function (t) { if ((kids[t.id] || []).length) S.collapsed[t.id] = 1; }); savePref(); rerender(); break;
         case "export": exportCsv(); break;
         case "client-copy": clientCopy(); break;
+        case "own-toggle": S.ownOpen = !S.ownOpen; S.ownQ = ""; rerender(); if (S.ownOpen) { var oq = document.getElementById("own-q"); if (oq) oq.focus(); } break;
+        case "own-clear": S.owners = []; rerender(); break;
         case "release-sup": (function () {
           var n = DATA.tasks.filter(function (t) { return t.status === "supplier"; }).length;
           confirmBox("שחרור משימות", "להעביר " + n + " משימות מ\"תלוי בבחירת ספק\" ל\"טרם החל\"? אפשר לבדוק לפני הפרסום.", "שחרור", function () {
@@ -682,17 +710,26 @@
   });
   function scrollToSel() { var r = document.querySelector('.row[data-id="' + CSS_esc(S.sel) + '"]'); if (r) r.scrollIntoView({ block: "center" }); }
   function CSS_esc(s) { return window.CSS && window.CSS.escape ? window.CSS.escape(s) : s; }
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && S.sel && !document.querySelector(".modal")) { S.sel = null; rerender(); } });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape" || document.querySelector(".modal")) return;
+    if (S.ownOpen) { S.ownOpen = false; rerender(); return; }
+    if (S.sel) { S.sel = null; rerender(); }
+  });
   document.addEventListener("input", function (e) {
     var id = e.target.id;
     if (id === "q") { S.q = e.target.value; rerenderSoon(); return; }
+    if (id === "own-q") { S.ownQ = e.target.value; rerenderSoon(); return; }
     var t = S.sel && byId[S.sel]; if (!t || id.indexOf("e-") !== 0) return;
     var k = id.slice(2);
     if (k === "name" || k === "owner" || k === "notes") { t[k] = e.target.value.trim() === "" && k === "name" ? t[k] : e.target.value; touch(); rerenderGanttOnly(); }
   });
   document.addEventListener("change", function (e) {
     var id = e.target.id;
-    if (id === "own") { S.owner = e.target.value; rerender(); return; }
+    if (e.target.dataset && e.target.dataset.own != null) {
+      var nm = e.target.dataset.own, i = S.owners.indexOf(nm);
+      if (e.target.checked && i < 0) S.owners.push(nm); else if (!e.target.checked && i >= 0) S.owners.splice(i, 1);
+      rerender(); return;
+    }
     if (id === "zoom") { S.zoom = +e.target.value; savePref(); rerender(); return; }
     if (id === "rp-date") { S.rpDate = e.target.value || TODAY_S; rerender(); return; }
     var ds_ = e.target.dataset || {};
