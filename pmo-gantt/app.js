@@ -11,12 +11,14 @@
   var SAVED = JSON.parse(JSON.stringify(DATA));
   var app = document.getElementById("app");
 
+  /* phones open on the summary view; desktop and phone remember their own last tab */
+  var MOB = !!(window.matchMedia && window.matchMedia("(max-width: 760px)").matches), TABK = MOB ? "tabM" : "tab";
   var S = {
-    tab: "gantt", edit: false, canEdit: false, dl: null, sel: null,
+    tab: MOB ? "overview" : "gantt", edit: false, canEdit: false, dl: null, sel: null,
     q: "", owners: [], ownOpen: false, ownQ: "", filter: "all", zoom: 84, collapsed: {}, dirty: false, saving: false, rp: "daily", rpDate: ""
   };
-  try { var pref = JSON.parse(localStorage.getItem("pmo-pref") || "{}"); if (pref.zoom) S.zoom = pref.zoom; if (pref.collapsed) S.collapsed = pref.collapsed; if (pref.tab) S.tab = pref.tab; } catch (e) {}
-  function savePref() { try { localStorage.setItem("pmo-pref", JSON.stringify({ zoom: S.zoom, collapsed: S.collapsed, tab: S.tab })); } catch (e) {} }
+  try { var pref = JSON.parse(localStorage.getItem("pmo-pref") || "{}"); if (pref.zoom) S.zoom = pref.zoom; if (pref.collapsed) S.collapsed = pref.collapsed; if (pref[TABK]) S.tab = pref[TABK]; } catch (e) {}
+  function savePref() { try { var pr = JSON.parse(localStorage.getItem("pmo-pref") || "{}"); pr.zoom = S.zoom; pr.collapsed = S.collapsed; pr[TABK] = S.tab; localStorage.setItem("pmo-pref", JSON.stringify(pr)); } catch (e) {} }
 
   /* ---------- dates ---------- */
   function dn(s) { if (!s) return null; var p = s.split("-"); return Date.UTC(+p[0], +p[1] - 1, +p[2]) / 864e5; }
@@ -309,22 +311,38 @@
   function shortLabel(s) { return s.length > 22 ? s.slice(0, 21) + "…" : s; }
 
   function overview() {
-    var h = '<div class="grid2"><div class="card"><h2>התקדמות לפי פרק</h2>';
+    var L = leaves();
+    function byFe(a, b) { return (C[a.id].fe || 0) - (C[b.id].fe || 0); }
+    function mini(title, arr, emptyTxt, f) {
+      var h = '<h3>' + title + ' <span class="note">(' + arr.length + ')</span></h3><div class="list">';
+      if (!arr.length) h += '<div class="note">' + emptyTxt + '</div>';
+      arr.slice(0, 6).forEach(function (t) { var st = statusOf(t); h += '<div class="li" data-open="' + esc(t.id) + '"><span class="wbs">' + esc(t.id) + '</span><span><div>' + esc(t.name) + '</div><div class="o">' + (f === "late" ? "יעד " + fm(C[t.id].fe) + " · " + (TODAY - C[t.id].fe === 1 ? "יום איחור אחד" : (TODAY - C[t.id].fe) + " ימי איחור") : "יעד " + fm(C[t.id].fe)) + '</div></span><span class="pill ' + st[0] + '">' + st[1] + '</span></div>'; });
+      if (arr.length > 6) h += '<button class="btn sm more" data-tab="attn">' + (arr.length - 6 === 1 ? "ועוד משימה אחת" : "ועוד " + (arr.length - 6) + " משימות") + '</button>';
+      return h + '</div>';
+    }
+    var nextMs = (DATA.project.milestones || []).map(function (m) { return { v: dn(m.date), l: m.label }; }).filter(function (m) { return m.v != null && m.v >= TODAY; }).sort(function (a, b) { return a.v - b.v; })[0];
+    var h = '<div class="grid2 ov">';
+    h += '<div class="card ov-now"><h2>מה קורה עכשיו</h2>' + (nextMs ? '<div class="nextms"><i></i><span>אבן הדרך הבאה: <b>' + esc(nextMs.l) + '</b> · ' + fmy(nextMs.v) + (nextMs.v - TODAY > 0 ? ' (בעוד ' + (nextMs.v - TODAY === 1 ? "יום" : (nextMs.v - TODAY) + " ימים") + ')' : ' (היום)') + '</span></div>' : '') +
+      mini("באיחור", L.filter(function (t) { return C[t.id].late; }).sort(byFe), "אין משימות באיחור.", "late") +
+      mini("יעד ב-7 הימים הקרובים", L.filter(function (t) { return C[t.id].soon; }).sort(byFe), "אין משימות שמסתיימות בשבוע הקרוב.") + '</div>';
+    h += '<div class="card ov-sec"><h2>התקדמות לפי פרק</h2>';
     roots.forEach(function (t) {
       var c = C[t.id], st = statusOf(t), pc = Math.round(c.pct * 100);
       h += '<div class="sec" data-open="' + esc(t.id) + '"><span class="wbs">' + esc(t.id) + '</span><span class="t" title="' + esc(t.name) + '">' + esc(t.name) + '</span>' +
         '<span class="m"><span class="meter"><i style="width:' + pc + '%;' + (c.late ? "background:var(--bad)" : "") + '"></i></span><b>' + pc + '%</b></span>' +
         '<span class="c4"><span class="pill ' + st[0] + '">' + (c.leaves ? c.doneN + "/" + c.leaves + (c.lateN ? " · " + c.lateN + " באיחור" : "") : "טרם פורט") + '</span></span></div>';
     });
-    h += '</div><div style="display:flex;flex-direction:column;gap:16px"><div class="card"><h2>אבני דרך</h2><div class="mslist">';
+    h += '</div><div class="card ov-ms"><h2>אבני דרך</h2><div class="mslist">';
     (DATA.project.milestones || []).forEach(function (m) { var v = dn(m.date); h += '<div><span class="dt">' + fm(v) + '</span><span>' + esc(m.label) + '</span>' + (v < TODAY ? '<span class="note">(עבר)</span>' : '') + '</div>'; });
-    h += '</div></div><div class="card"><h2>עדכונים אחרונים</h2><div class="log">';
+    h += '</div></div>';
+    if (DATA.snapshot && !(DATA.log || []).length) return h + '</div>';
+    h += '<div class="card ov-log"><h2>עדכונים אחרונים</h2><div class="log">';
     (DATA.log || []).slice(0, 12).forEach(function (e) {
       var items = e.items || (e.text ? [e.text] : []);
       h += '<div><div class="d">' + esc(fmtStamp(e.at)) + '</div><ul>' + items.slice(0, 8).map(function (i) { return '<li>' + esc(i) + '</li>'; }).join("") + (items.length > 8 ? '<li>ועוד ' + (items.length - 8) + ' שינויים</li>' : '') + '</ul></div>';
     });
     if (!(DATA.log || []).length) h += '<div class="note">עדיין אין עדכונים.</div>';
-    h += '</div></div></div></div>';
+    h += '</div></div></div>';
     return h;
   }
   function attention() {
@@ -715,6 +733,8 @@
   }
   function clientCopy() {
     var copy = JSON.parse(JSON.stringify(SAVED));
+    copy.tasks.forEach(function (t) { t.notes = ""; });   /* internal notes stay inside NGG */
+    copy.log = [];
     copy.snapshot = { at: new Date().toISOString() };
     var json = JSON.stringify(copy).replace(/</g, "\\u003c");
     var html = "<!doctype html><html lang=\"he\" dir=\"rtl\"><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><style>" + RESET + "</style></head><body>" +
@@ -1035,7 +1055,8 @@
     if ((el = e.target.closest("[data-done]"))) { toggleDone(el.getAttribute("data-done")); return; }
     if ((el = e.target.closest("[data-tab]"))) { S.tab = el.getAttribute("data-tab"); savePref(); render(); return; }
     if ((el = e.target.closest("[data-f]"))) { S.filter = el.getAttribute("data-f"); rerender(); return; }
-    if ((el = e.target.closest("[data-open]"))) { e.preventDefault(); S.sel = el.getAttribute("data-open"); if (!e.target.closest(".drawer")) { S.tab = "gantt"; var p = parentOf(S.sel); while (p) { delete S.collapsed[p]; p = parentOf(p); } S.filter = "all"; S.q = ""; S.owners = []; render(); scrollToSel(); } else { rerender(); } return; }
+    if ((el = e.target.closest("[data-open]"))) { e.preventDefault(); S.sel = el.getAttribute("data-open"); if (MOB && !e.target.closest(".drawer")) { rerender(); return; }  /* on a phone keep the summary and open the task card over it */
+      if (!e.target.closest(".drawer")) { S.tab = "gantt"; var p = parentOf(S.sel); while (p) { delete S.collapsed[p]; p = parentOf(p); } S.filter = "all"; S.q = ""; S.owners = []; render(); scrollToSel(); } else { rerender(); } return; }
     if ((el = e.target.closest("[data-a]"))) {
       switch (el.getAttribute("data-a")) {
         case "toggle-edit": S.edit = !S.edit; rerender(); break;

@@ -267,3 +267,26 @@ select.st-supplier{color:var(--sup);font-weight:600}
 .cal-d.today{box-shadow:inset 0 0 0 1px var(--accent);color:var(--accent);font-weight:600}
 .cal-d.sel{background:var(--accent);color:#fff;font-weight:600}
 .cal-f{display:flex;justify-content:space-between;margin-top:8px;border-top:1px solid var(--grid);padding-top:8px}
+
+/* summary view (default on phones) */
+.grid2.ov{grid-template-areas:"now ms" "sec ms" "sec log";grid-template-rows:auto auto 1fr}
+.ov-now{grid-area:now}.ov-sec{grid-area:sec}.ov-ms{grid-area:ms}.ov-log{grid-area:log}
+.ov-now h3:first-of-type{margin-top:10px}
+.nextms{display:flex;gap:8px;align-items:center;background:var(--accent-2);color:var(--text);border-radius:8px;padding:8px 10px;font-size:13.5px}
+.nextms i{width:9px;height:9px;background:var(--pink);transform:rotate(45deg);flex:none}
+.nextms b{color:var(--accent)}
+.list .more{align-self:flex-start;margin-top:6px}
+@media (max-width:900px){.grid2.ov{grid-template-areas:"now" "ms" "sec" "log";grid-template-rows:none}}
+@media (max-width:760px){
+  #app{padding-inline:12px;gap:12px}
+  .top{padding:14px 16px 16px}
+  h1{font-size:20px}
+  .sub{font-size:12.5px}
+  .bar-row{flex-direction:column;align-items:stretch}
+  .tabs{overflow-x:auto;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{white-space:nowrap;flex:1 0 auto;padding:7px 12px}
+  .kpi{padding:10px 12px}.kpi .v{font-size:19px}
+  .card{padding:14px}
+  .li{grid-template-columns:44px minmax(0,1fr) auto}
+}
