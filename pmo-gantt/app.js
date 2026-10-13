@@ -11,13 +11,14 @@
   var SAVED = JSON.parse(JSON.stringify(DATA));
   var app = document.getElementById("app");
 
-  /* phones open on the summary view; desktop and phone remember their own last tab */
-  var MOB = !!(window.matchMedia && window.matchMedia("(max-width: 760px)").matches), TABK = MOB ? "tabM" : "tab";
+  /* the client file and phones open on the summary view; each remembers its own last tab */
+  var MOB = !!(window.matchMedia && window.matchMedia("(max-width: 760px)").matches), SNAP = !!DATA.snapshot;
+  var TABK = SNAP ? "tabS" : MOB ? "tabM" : "tab";
   var S = {
-    tab: MOB ? "overview" : "gantt", edit: false, canEdit: false, dl: null, sel: null,
+    tab: SNAP || MOB ? "overview" : "gantt", edit: false, canEdit: false, dl: null, sel: null,
     q: "", owners: [], ownOpen: false, ownQ: "", filter: "all", zoom: 84, collapsed: {}, dirty: false, saving: false, rp: "daily", rpDate: ""
   };
-  try { var pref = JSON.parse(localStorage.getItem("pmo-pref") || "{}"); if (pref.zoom) S.zoom = pref.zoom; if (pref.collapsed) S.collapsed = pref.collapsed; if (pref[TABK]) S.tab = pref[TABK]; } catch (e) {}
+  try { var pref = JSON.parse(localStorage.getItem("pmo-pref") || "{}"); if (pref.zoom) S.zoom = pref.zoom; if (pref.collapsed) S.collapsed = pref.collapsed; if (pref[TABK] && !SNAP) S.tab = pref[TABK]; } catch (e) {}
   function savePref() { try { var pr = JSON.parse(localStorage.getItem("pmo-pref") || "{}"); pr.zoom = S.zoom; pr.collapsed = S.collapsed; pr[TABK] = S.tab; localStorage.setItem("pmo-pref", JSON.stringify(pr)); } catch (e) {} }
 
   /* ---------- dates ---------- */
@@ -211,7 +212,7 @@
       kpi("Go-Live צפוי", glDate != null ? fmy(glDate) : "—", '<span class="note">' + (gl ? (glDelta > 0 ? "דחייה של " + glDelta + " ימים" : "לפי התוכנית") : "") + '</span>', glDelta > 0 ? "bad" : "") +
       '</section>';
     h += '<div class="bar-row"><div class="tabs" role="tablist">' +
-      tab("gantt", "גאנט") + tab("overview", "תמונת מצב") + tab("attn", "לטיפול" + (late ? " (" + late + ")" : "")) + tab("report", "דוח יומי / שבועי") + '</div>';
+      tab("overview", "תמונת מצב") + tab("gantt", "גאנט") + tab("attn", "לטיפול" + (late ? " (" + late + ")" : "")) + tab("report", "דוח יומי / שבועי") + '</div>';
     if (S.tab === "gantt") {
       h += '<div class="tools"><input type="search" id="q" placeholder="חיפוש משימה, WBS או אחראי" value="' + esc(S.q) + '" aria-label="חיפוש">' +
         ownerFilter() +
