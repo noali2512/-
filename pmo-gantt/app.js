@@ -40,8 +40,8 @@
   }
   var ICON_CAL = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
   function dateIn(attrs, iso) {
-    return '<span class="dpick"><input type="text" inputmode="numeric" autocomplete="off" data-date="1" placeholder="יום.חודש.שנה" value="' + esc(heDate(iso)) + '" ' + attrs + '>' +
-      '<button type="button" class="dbtn" data-cal="1" tabindex="-1" aria-label="בחירה מלוח שנה">' + ICON_CAL + '</button><input type="date" class="dnat" tabindex="-1" aria-hidden="true" value="' + esc(iso || "") + '"></span>';
+    return '<span class="dpick"><input type="text" inputmode="numeric" autocomplete="off" data-date="1" data-iso="' + esc(iso || "") + '" placeholder="יום.חודש.שנה" value="' + esc(heDate(iso)) + '" ' + attrs + '>' +
+      '<button type="button" class="dbtn" data-cal="1" aria-label="בחירה מלוח שנה" title="בחירה מלוח שנה">' + ICON_CAL + '</button></span>';
   }
   function pad(x) { return (x < 10 ? "0" : "") + x; }
   var NOW = new Date(); var TODAY = Date.UTC(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()) / 864e5;
@@ -381,7 +381,7 @@
         h += '<dl class="kv"><dt>טווח (מחושב)</dt><dd class="dt">' + rg(c.fs, c.fe, fmy) + '</dd><dt>התקדמות</dt><dd>' + Math.round(c.pct * 100) + '% (' + c.doneN + '/' + c.leaves + ')</dd></dl><div class="hint">התאריכים והאחוז של משימת על מחושבים מתתי-המשימות.</div>';
       }
       h += fld("notes", "הערות (גלויות ללקוח)", '<textarea id="e-notes">' + esc(t.notes) + '</textarea>');
-      h += '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-a="move-up">הזזה למעלה</button><button class="btn sm" data-a="move-down">הזזה למטה</button><button class="btn sm" data-a="add-child">+ תת-משימה</button><button class="btn sm danger" data-a="delete">מחיקת משימה</button></div>';
+      h += '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-a="move-up">הזזה למעלה</button><button class="btn sm" data-a="move-down">הזזה למטה</button><button class="btn sm" data-a="add-after">+ משימה מתחת לזו</button><button class="btn sm" data-a="add-child">+ תת-משימה</button><button class="btn sm danger" data-a="delete">מחיקת משימה</button></div>';
     }
     h += '</div>';
     mountDrawer(h);
@@ -495,13 +495,16 @@
     var n = 0; DATA.tasks.forEach(function (t) { if (parentOf(t.id) === pid) { var k = +t.id.split(".").pop(); if (k > n) n = k; } });
     return (pid ? pid + "." : "") + (n + 1);
   }
-  function newTask(pid) {
+  function newTask(pid, afterId) {
     var p = pid && byId[pid], pc = p && C[pid];
     var s = pc && pc.bs != null ? ds(Math.max(pc.bs, TODAY)) : TODAY_S;
     var t = { uid: newUid(), id: nextChildId(pid), name: "משימה חדשה", notes: "", start: s, end: ds(dn(s) + 6), deps: [], owner: "", status: "todo", forecastEnd: "", actualEnd: "" };
     DATA.tasks.push(t);
     if (pid) delete S.collapsed[pid];
-    S.sel = t.id; touch(); rerender();
+    if (afterId) { build(); moveTask(t.id, afterId, "after", true); } else applyTree(orderedTree());
+    var nt = DATA.tasks.filter(function (x) { return x.uid === t.uid; })[0];
+    S.sel = nt ? nt.id : null; touch(); rerender();
+    if (nt && afterId) toast("נוספה משימה " + nt.id + ". המשימות שאחריה קיבלו מספור חדש.");
     var el = document.getElementById("e-name"); if (el) { el.focus(); el.select(); }
   }
   function toggleDone(id) {
@@ -516,7 +519,8 @@
       var id = t.id;
       DATA.tasks = DATA.tasks.filter(function (x) { return x.id !== id && x.id.indexOf(id + ".") !== 0; });
       DATA.tasks.forEach(function (x) { x.deps = (x.deps || []).filter(function (d) { return d !== id && d.indexOf(id + ".") !== 0; }); });
-      S.sel = null; touch(); rerender();
+      S.sel = null; applyTree(orderedTree()); touch(); rerender();
+      toast("המשימה נמחקה ומספור ה-WBS עודכן בכל התוכנית.");
     });
   }
   function confirmBox(title, text, okLabel, fn) {
@@ -567,7 +571,7 @@
     if (S.sel && map[S.sel]) S.sel = map[S.sel];
     DATA.tasks = list;
   }
-  function moveTask(src, tgt, pos) {
+  function moveTask(src, tgt, pos, quiet) {
     if (!src || !tgt || src === tgt || tgt.indexOf(src + ".") === 0) return false;
     var tree = orderedTree(), node = null;
     (function detach(nodes) { for (var i = 0; i < nodes.length; i++) { if (nodes[i].t.id === src) { node = nodes.splice(i, 1)[0]; return true; } if (detach(nodes[i].ch)) return true; } return false; })(tree);
@@ -576,7 +580,9 @@
     if (!ok) return false;
     var uid = node.t.uid;
     if (pos === "inside") delete S.collapsed[tgt];
-    applyTree(tree); touch();
+    applyTree(tree);
+    if (quiet) return true;
+    touch();
     var moved = DATA.tasks.filter(function (t) { return t.uid === uid; })[0];
     rerender();
     if (moved) toast("המשימה הועברה למיקום " + moved.id + ". המספור והתלויות עודכנו.");
@@ -915,6 +921,7 @@
       DATA.tasks = DATA.tasks.filter(function (t) { if (del[t.id]) { removed++; return false; } return true; });
       DATA.tasks.forEach(function (t) { t.deps = (t.deps || []).filter(function (d) { return !del[d]; }); });
     }
+    if (P.adds.length || removed) applyTree(orderedTree());
     S.edit = true; touch(); rerender();
     toast("הייבוא הוחל: " + P.updates.length + " עודכנו, " + P.adds.length + " נוספו" + (removed ? ", " + removed + " נמחקו" : "") + ". לבדיקה ולפרסום.", 6000);
   }
@@ -963,17 +970,60 @@
       return;
     }
     if (!el.dataset || !el.dataset.date) return;
-    var prev = el.parentNode.querySelector(".dnat"), prevIso = prev ? prev.value : "";
+    var prevIso = el.getAttribute("data-iso") || "";
     var iso = heParse(el.value, prevIso ? +prevIso.slice(0, 4) : null);
     if (iso === null) { e.stopImmediatePropagation(); toast("התאריך לא תקין. כתבי למשל 31.10.26"); el.value = heDate(prevIso); return; }
     el.value = iso;
   }, true);
+  /* Own calendar popover: the browser's native picker is blocked inside the artifact frame. */
+  var HE_MONTHS = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+  var CAL = null;
+  function closeCal() { if (CAL) { CAL.el.remove(); CAL = null; } }
+  function openCal(input) {
+    closeCal();
+    var iso = input.getAttribute("data-iso") || heParse(input.value) || "", sel = dn(iso), base = sel != null ? sel : TODAY;
+    var d0 = new Date(base * 864e5);
+    CAL = { input: input, y: d0.getUTCFullYear(), m: d0.getUTCMonth(), sel: sel, el: document.createElement("div") };
+    CAL.el.className = "cal"; CAL.el.setAttribute("role", "dialog"); CAL.el.setAttribute("aria-label", "בחירת תאריך");
+    document.body.appendChild(CAL.el); drawCal(); placeCal();
+  }
+  function placeCal() {
+    if (!CAL) return;
+    var r = CAL.input.parentNode.getBoundingClientRect(), w = CAL.el.offsetWidth, h = CAL.el.offsetHeight;
+    var top = r.bottom + 4; if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 4);
+    var left = r.right - w; if (left < 8) left = 8; if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8;
+    CAL.el.style.top = top + "px"; CAL.el.style.left = left + "px";
+  }
+  function drawCal() {
+    var y = CAL.y, m = CAL.m, first = Date.UTC(y, m, 1) / 864e5, dow = new Date(first * 864e5).getUTCDay(), days = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    var h = '<div class="cal-h"><button type="button" class="cal-nav" data-cnav="-1" aria-label="החודש הקודם">›</button><b>' + HE_MONTHS[m] + ' ' + y + '</b><button type="button" class="cal-nav" data-cnav="1" aria-label="החודש הבא">‹</button></div><div class="cal-g">';
+    ["א", "ב", "ג", "ד", "ה", "ו", "ש"].forEach(function (w) { h += '<span class="cal-w">' + w + '</span>'; });
+    for (var i = 0; i < dow; i++) h += '<span></span>';
+    for (var dd = 1; dd <= days; dd++) {
+      var n = first + dd - 1;
+      h += '<button type="button" class="cal-d' + (n === CAL.sel ? " sel" : "") + (n === TODAY ? " today" : "") + '" data-cday="' + n + '">' + dd + '</button>';
+    }
+    h += '</div><div class="cal-f"><button type="button" class="btn sm" data-cday="' + TODAY + '">היום</button><button type="button" class="btn sm" data-cclear="1">ניקוי</button></div>';
+    CAL.el.innerHTML = h;
+  }
+  function pickCal(iso) {
+    var input = CAL.input; closeCal();
+    input.value = iso; input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
   document.addEventListener("click", function (e) {
-    var b = e.target.closest && e.target.closest("[data-cal]"); if (!b) return;
-    e.preventDefault(); e.stopPropagation();
-    var nat = b.parentNode.querySelector(".dnat");
-    try { nat.showPicker(); } catch (x) { nat.focus(); nat.click(); }
+    var b = e.target.closest && e.target.closest("[data-cal]");
+    if (b) { e.preventDefault(); e.stopPropagation(); var inp = b.parentNode.querySelector("[data-date]"); if (CAL && CAL.input === inp) closeCal(); else openCal(inp); return; }
+    if (!CAL) return;
+    if (!e.target.closest(".cal")) { closeCal(); return; }
+    e.stopPropagation();
+    var nv = e.target.closest("[data-cnav]"), dy = e.target.closest("[data-cday]");
+    if (nv) { CAL.m += +nv.getAttribute("data-cnav"); if (CAL.m < 0) { CAL.m = 11; CAL.y--; } if (CAL.m > 11) { CAL.m = 0; CAL.y++; } drawCal(); }
+    else if (dy) pickCal(ds(+dy.getAttribute("data-cday")));
+    else if (e.target.closest("[data-cclear]")) pickCal("");
   }, true);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && CAL) { closeCal(); e.stopPropagation(); } }, true);
+  window.addEventListener("resize", closeCal);
+  document.addEventListener("scroll", function (e) { if (CAL && !(e.target.closest && e.target.closest(".cal"))) closeCal(); }, true);
 
   /* ---------- events ---------- */
   document.addEventListener("click", function (e) {
@@ -1000,6 +1050,7 @@
         case "rp-weekly": S.rp = "weekly"; rerender(); break;
         case "rp-copy": copyReport(); break;
         case "add-child": newTask(S.sel); break;
+        case "add-after": if (S.sel && byId[S.sel]) newTask(parentOf(S.sel), S.sel); break;
         case "move-up": case "move-down": moveSibling(S.sel, el.getAttribute("data-a") === "move-up" ? -1 : 1); break;
         case "delete": askDelete(); break;
         case "expand": S.collapsed = {}; savePref(); rerender(); break;
