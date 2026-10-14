@@ -364,8 +364,39 @@
     /* red only when Go-Live itself moves; delays that Go-Live still absorbs are amber */
     var health = glDelta > 0 ? ["bad", "Go-Live בסיכון"] : late.length || critRisk.length ? ["warn", "דורש תשומת לב"] : ["ok", "בתוכנית"];
     function chap(t) { return t.id.split(".")[0]; }
-    /* short generic names ("גיוס") read better with their parent ("מנהל אתר – גיוס") */
-    function label(t) { var p = parentOf(t.id), pt = p && p.indexOf(".") > 0 && byId[p]; return pt && t.name.length < 16 ? pt.name + " – " + t.name : t.name; }
+    /* the parent task under the chapter, so subtasks read in context */
+    function owner_(t) { var p = parentOf(t.id); return p && p.indexOf(".") > 0 && byId[p] ? byId[p] : null; }
+    function item(t) { var pt = owner_(t); return '<li data-open="' + esc(t.id) + '"' + (t.critical ? ' class="xc"' : '') + '>' + esc(t.name) + (pt ? '<span class="xp">' + esc(pt.id + " " + pt.name) + '</span>' : '') + '</li>'; }
+    function itemText(t) { var pt = owner_(t); return "- " + t.name + (pt ? " (" + pt.name + ")" : ""); }
+    function autoText(arr) {
+      var g = {}, order = [];
+      arr.forEach(function (t) { var k = chap(t); if (!g[k]) { g[k] = []; order.push(k); } g[k].push(t); });
+      order.sort(function (a, b) { return +a - +b; });
+      return order.map(function (k) { return (byId[k] ? byId[k].name : k) + ":\n" + g[k].map(itemText).join("\n"); }).join("\n\n");
+    }
+    function manual(txt) {
+      var h = '<div class="xm">', ul = false;
+      String(txt).split("\n").forEach(function (ln) {
+        var m = ln.match(/^\s*[-•*]\s*(.*)$/);
+        if (m) { if (!ul) { h += '<ul>'; ul = true; } h += '<li>' + esc(m[1]) + '</li>'; return; }
+        if (ul) { h += '</ul>'; ul = false; }
+        if (ln.trim()) h += '<div class="xm-h">' + esc(ln.trim()) + '</div>';
+      });
+      return h + (ul ? '</ul>' : '') + '</div>';
+    }
+    var wk = fmISO(w0), XT = (DATA.project.exec || {})[wk] || {};
+    function section(key, title, sub, arr, extra) {
+      var editing = S.edit && S.execEdit === key, has = XT[key] != null && XT[key] !== "";
+      var h = '<section class="card"><div class="x-ttl"><h2>' + title + ' <span class="note">' + sub + '</span></h2>' +
+        (S.edit && !editing ? '<button class="btn sm" data-a="x-edit" data-k="' + key + '">' + (has ? "עריכת הטקסט" : "עריכה ידנית") + '</button>' : '') + '</div>';
+      if (editing) {
+        h += '<textarea class="x-ta" id="x-ta" dir="rtl">' + esc(has ? XT[key] : autoText(arr)) + '</textarea>' +
+          '<div class="hint">כל שורה שמתחילה במקף (-) מוצגת כסעיף. שורה בלי מקף מוצגת ככותרת. הטקסט נשמר לשבוע הנוכחי בלבד.</div>' +
+          '<div class="x-btns"><button class="btn primary sm" data-a="x-save" data-k="' + key + '">שמירה</button><button class="btn sm" data-a="x-cancel">ביטול</button>' +
+          (has ? '<button class="btn sm" data-a="x-auto" data-k="' + key + '">חזרה לרשימה האוטומטית</button>' : '') + '</div>';
+      } else h += (has ? manual(XT[key]) : grouped(arr)) + (extra || "");
+      return h + '</section>';
+    }
     function grouped(arr) {
       var g = {}, order = [];
       arr.forEach(function (t) { var k = chap(t); if (!g[k]) { g[k] = []; order.push(k); } g[k].push(t); });
@@ -375,7 +406,7 @@
       return '<div class="xg">' + order.map(function (k) {
         var items = g[k], r = byId[k];
         return '<div class="xg-r"><div class="xg-h"><span class="wbs">' + esc(k) + '</span><b>' + esc(r ? r.name : "") + '</b><span class="xg-n">' + items.length + '</span></div><ul>' +
-          items.slice(0, 2).map(function (t) { return '<li data-open="' + esc(t.id) + '"' + (t.critical ? ' class="xc"' : '') + '>' + esc(label(t)) + '</li>'; }).join("") +
+          items.slice(0, 2).map(item).join("") +
           (items.length > 2 ? '<li class="more">' + (items.length - 2 === 1 ? "ועוד משימה אחת" : "ועוד " + (items.length - 2) + " משימות") + '</li>' : '') + '</ul></div>';
       }).join("") + (rest.length ? '<div class="note">ועוד: ' + rest.map(function (k) { return esc(byId[k] ? byId[k].name : k) + " (" + g[k].length + ")"; }).join(" · ") + '</div>' : '') + '</div>';
     }
@@ -400,9 +431,9 @@
         '<div class="road-today" style="right:' + pos(TODAY) + '%"><span>היום ' + fm(TODAY) + '</span></div></div></section>';
     }
     // this week / next week
-    h += '<div class="x-2"><section class="card"><h2>מה בוצע השבוע <span class="note">' + rg(w0, TODAY) + ' · ' + doneW.length + ' משימות</span></h2>' + grouped(doneW) + '</section>' +
-      '<section class="card"><h2>מה מתוכנן לשבוע הבא <span class="note">' + rg(n0, n1) + ' · ' + nextW.length + ' משימות</span></h2>' + grouped(nextW) +
-      (restW.length ? '<div class="note" style="margin-top:8px">ועוד ' + restW.length + ' משימות פתוחות עם יעד עד סוף השבוע הנוכחי.</div>' : '') + '</section></div>';
+    h += '<div class="x-2">' + section("done", "מה בוצע השבוע", rg(w0, TODAY) + ' · ' + doneW.length + ' משימות', doneW) +
+      section("next", "מה מתוכנן לשבוע הבא", rg(n0, n1) + ' · ' + nextW.length + ' משימות', nextW,
+        restW.length ? '<div class="note" style="margin-top:8px">ועוד ' + restW.length + ' משימות פתוחות עם יעד עד סוף השבוע הנוכחי.</div>' : '') + '</div>';
     // critical path
     h += '<section class="card x-crit"><h2>הנתיב הקריטי לעלייה לאוויר</h2>';
     if (!crit.length) h += '<div class="note">עדיין לא סומנו משימות בנתיב הקריטי. מסמנים במצב עריכה, בעמודת "קריטי" (עיגול הדגל).</div>';
@@ -428,6 +459,8 @@
     }).join("") + '</div></section>';
     return h + '</div>';
   }
+  function execWeek() { return fmISO(TODAY - new Date(TODAY * 864e5).getUTCDay()); }
+  function fmISO(n) { return new Date(n * 864e5).toISOString().slice(0, 10); }
   function attention() {
     var L = leaves();
     function block(title, arr, emptyTxt, dateFn) {
@@ -662,6 +695,7 @@
     SAVED.tasks.forEach(function (t) { if (!b[t.uid || t.id]) out.push("הוסרה משימה: " + t.id + " " + t.name); });
     if (ren) out.unshift("עודכן סדר המשימות (" + ren + " משימות קיבלו מספר WBS חדש)");
     if (JSON.stringify(SAVED.project.milestones) !== JSON.stringify(DATA.project.milestones)) out.push("עודכנו אבני הדרך של הפרויקט");
+    if (JSON.stringify(SAVED.project.exec || {}) !== JSON.stringify(DATA.project.exec || {})) out.push("עודכן הטקסט במבט הנהלה");
     ["title", "client", "subtitle", "goLiveDate"].forEach(function (k) { if (SAVED.project[k] !== DATA.project[k]) out.push(k === "goLiveDate" ? "מועד Go-Live עודכן ל-" + fmy(dn(DATA.project.goLiveDate)) : "עודכנו פרטי הפרויקט"); });
     return out;
   }
@@ -748,7 +782,7 @@
   function dDel() { try { localStorage.removeItem(DKEY); } catch (e) {} try { sessionStorage.removeItem(DKEY); } catch (e) {} }
   function draftObj(extra) { var o = { v: 2, at: new Date().toISOString(), base: { savedAt: SAVED.savedAt, tasks: SAVED.tasks, project: SAVED.project }, tasks: DATA.tasks, project: DATA.project }; if (extra) for (var k in extra) o[k] = extra[k]; return o; }
   function stashDraft() { if (DATA.snapshot) return; if (S.dirty) { if (dSet(draftObj())) S.localAt = new Date(); } else { dDel(); S.localAt = null; } }
-  var TF = ["name", "notes", "start", "end", "owner", "status", "forecastEnd", "actualEnd", "critical"], PF = ["title", "client", "subtitle", "goLiveDate", "goLiveTask", "milestones"];
+  var TF = ["name", "notes", "start", "end", "owner", "status", "forecastEnd", "actualEnd", "critical"], PF = ["title", "client", "subtitle", "goLiveDate", "goLiveTask", "milestones", "exec"];
   function countChanges(d) {
     var b = {}, m = {}, n = 0;
     d.base.tasks.forEach(function (t) { b[t.uid] = t; }); d.tasks.forEach(function (t) { m[t.uid] = t; });
@@ -1167,6 +1201,15 @@
         case "rp-daily": S.rp = "daily"; rerender(); break;
         case "rp-weekly": S.rp = "weekly"; rerender(); break;
         case "rp-copy": copyReport(); break;
+        case "x-edit": S.execEdit = el.getAttribute("data-k"); rerender(); setTimeout(function () { var ta = document.getElementById("x-ta"); if (ta) ta.focus(); }, 0); break;
+        case "x-cancel": S.execEdit = null; rerender(); break;
+        case "x-save": case "x-auto": (function () {
+          var k = el.getAttribute("data-k"), ta = document.getElementById("x-ta"), w = execWeek();
+          DATA.project.exec = DATA.project.exec || {}; DATA.project.exec[w] = DATA.project.exec[w] || {};
+          if (el.getAttribute("data-a") === "x-auto" || !ta || !ta.value.trim()) delete DATA.project.exec[w][k]; else DATA.project.exec[w][k] = ta.value.replace(/\s+$/, "");
+          if (!Object.keys(DATA.project.exec[w]).length) delete DATA.project.exec[w];
+          S.execEdit = null; touch(); rerender();
+        })(); break;
         case "add-child": newTask(S.sel); break;
         case "add-after": if (S.sel && byId[S.sel]) newTask(parentOf(S.sel), S.sel); break;
         case "move-up": case "move-down": moveSibling(S.sel, el.getAttribute("data-a") === "move-up" ? -1 : 1); break;
