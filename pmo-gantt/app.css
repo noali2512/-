@@ -319,3 +319,16 @@ select.st-supplier{color:var(--sup);font-weight:600}
 .sw-crit{background:var(--crit-bg);box-shadow:inset -3px 0 0 var(--crit),0 0 0 1px var(--crit)}
 .critf{display:flex;gap:8px;align-items:center;background:var(--crit-bg);color:var(--crit);border-radius:8px;padding:8px 10px;font-weight:600;font-size:13.5px;cursor:pointer}
 .critf input{accent-color:var(--crit);width:16px;height:16px;margin:0}
+
+/* critical path: bold orange, round flag toggle (distinct from the green "done" square) */
+:root{--crit:#e8590c;--crit-bg:#fff1e7}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--crit:#ff8a3d;--crit-bg:#3a2214}}
+:root[data-theme="dark"]{--crit:#ff8a3d;--crit-bg:#3a2214}
+.ck-crit{width:22px;height:22px;border-radius:50%;border:1.5px dashed var(--muted);background:transparent;color:var(--muted);padding:0!important;display:grid;place-items:center;margin-inline:auto;opacity:.55;transition:opacity .12s,transform .12s}
+.ck-crit:hover{opacity:1;border-color:var(--crit);color:var(--crit)}
+.ck-crit.on{opacity:1;border:0;background:var(--crit);color:#fff;box-shadow:0 0 0 3px color-mix(in srgb,var(--crit) 25%,transparent)}
+.row.crit .info{box-shadow:inset -5px 0 0 var(--crit)}
+.row.crit.sel .info{box-shadow:inset -5px 0 0 var(--crit),inset -8px 0 0 var(--accent)}
+.row.crit:not(.done):not(.late) .nm{color:var(--crit);font-weight:700}
+.row.crit .b:not(.base):not(.over):not(.sum),.row.crit .b.sum{box-shadow:0 0 0 2px var(--crit)}
+.sw-crit{background:var(--crit-bg);box-shadow:inset -4px 0 0 var(--crit),0 0 0 1px var(--crit)}

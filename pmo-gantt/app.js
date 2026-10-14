@@ -181,6 +181,7 @@
 
   /* ---------- render ---------- */
   var ICON_CHECK = '<svg width="12" height="12" viewBox="0 0 12 12"><path d="m2.5 6.2 2.4 2.3 4.6-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var ICON_FLAG = '<svg width="11" height="12" viewBox="0 0 11 12" aria-hidden="true"><path d="M2 11.2V1.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M2.6 1.4h6.6L7.6 4l1.6 2.6H2.6z" fill="currentColor"/></svg>';
   var ICON_GRIP = '<svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true"><g fill="currentColor"><circle cx="3" cy="3" r="1.2"/><circle cx="7" cy="3" r="1.2"/><circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/><circle cx="3" cy="11" r="1.2"/><circle cx="7" cy="11" r="1.2"/></g></svg>';
   var ICON_CHEV = '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   function render() {
@@ -271,7 +272,7 @@
       var cls = "row l" + Math.min(r.lvl, 3) + (ch ? " par" : "") + (c.done ? " done" : c.late ? " late" : "") + (t.critical ? " crit" : "") + (S.sel === t.id ? " sel" : "");
       h += '<div class="' + cls + '" data-id="' + esc(t.id) + '"><div class="info">';
       if (S.edit) h += '<span class="drag" draggable="true" data-drag="' + esc(t.id) + '" title="גרירה לשינוי מיקום" aria-label="גרירה לשינוי מיקום">' + ICON_GRIP + '</span>' +
-        '<button class="check ck-crit' + (t.critical ? " on" : "") + '" data-crit="' + esc(t.id) + '" title="נתיב קריטי לעלייה לאוויר" aria-label="נתיב קריטי ' + esc(t.id) + '" aria-pressed="' + !!t.critical + '">' + (t.critical ? ICON_CHECK : "") + '</button>';
+        '<button class="ck-crit' + (t.critical ? " on" : "") + '" data-crit="' + esc(t.id) + '" title="' + (t.critical ? "משימה קריטית לעלייה לאוויר (לחיצה לביטול)" : "סימון כמשימה קריטית לעלייה לאוויר") + '" aria-label="נתיב קריטי ' + esc(t.id) + '" aria-pressed="' + !!t.critical + '">' + ICON_FLAG + '</button>';
       if (ch) h += '<button class="tw' + (S.collapsed[t.id] && !filtering() ? "" : " col") + '" data-tw="' + esc(t.id) + '" aria-label="פתיחה או כיווץ">' + ICON_CHEV + '</button>';
       else if (S.edit) h += '<button class="check' + (c.done ? " on" : "") + '" data-done="' + esc(t.id) + '" aria-label="סימון כהושלם" aria-pressed="' + c.done + '">' + (c.done ? ICON_CHECK : "") + '</button>';
       else h += '<span></span>';
