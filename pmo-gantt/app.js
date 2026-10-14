@@ -137,6 +137,7 @@
       case "soon": return c.soon;
       case "slip": return c.slip > 0 && !c.done;
       case "sup": return !c.done && t.status === "supplier";
+      case "crit": return !!t.critical;
       case "open": return !c.done;
       case "done": return c.done;
     }
@@ -179,6 +180,7 @@
   function owners() { var m = {}; DATA.tasks.forEach(function (t) { if (t.owner) m[t.owner] = 1; }); return Object.keys(m).sort(); }
 
   /* ---------- render ---------- */
+  var ICON_CHECK = '<svg width="12" height="12" viewBox="0 0 12 12"><path d="m2.5 6.2 2.4 2.3 4.6-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   var ICON_GRIP = '<svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true"><g fill="currentColor"><circle cx="3" cy="3" r="1.2"/><circle cx="7" cy="3" r="1.2"/><circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/><circle cx="3" cy="11" r="1.2"/><circle cx="7" cy="11" r="1.2"/></g></svg>';
   var ICON_CHEV = '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   function render() {
@@ -221,11 +223,11 @@
     }
     h += '</div>';
     if (S.tab === "gantt") {
-      h += '<div class="chips" role="group" aria-label="סינון לפי מצב">' + [["all", "הכול"], ["open", "פתוחות"], ["late", "באיחור"], ["soon", "יעד בשבוע הקרוב"], ["slip", "צפי חריגה"], ["sup", "תלוי בבחירת ספק"], ["done", "הושלמו"]].map(function (x) {
+      h += '<div class="chips" role="group" aria-label="סינון לפי מצב">' + [["all", "הכול"], ["open", "פתוחות"], ["late", "באיחור"], ["soon", "יעד בשבוע הקרוב"], ["slip", "צפי חריגה"], ["sup", "תלוי בבחירת ספק"], ["crit", "נתיב קריטי"], ["done", "הושלמו"]].map(function (x) {
         return '<button class="chipbtn" data-f="' + x[0] + '" aria-pressed="' + (S.filter === x[0]) + '">' + x[1] + '</button>';
       }).join("") + '</div>';
       h += gantt();
-      h += '<div class="legend"><span><i class="sw" style="background:var(--ok)"></i>הושלם</span><span><i class="sw" style="background:var(--bad)"></i>באיחור (עבר תאריך היעד)</span><span><i class="sw" style="background:var(--warn)"></i>צפי חריגה מהתוכנית</span><span><i class="sw" style="background:var(--accent)"></i>בביצוע</span><span><i class="sw sw-sup"></i>תלוי בבחירת ספק</span><span><i class="sw" style="background:var(--bar)"></i>מתוכנן</span><span><i class="sw" style="background:var(--bar-base);height:3px"></i>תוכנית הבסיס (כשיש סטייה)</span><span><i class="sw" style="background:var(--today);width:2px;height:12px"></i>היום</span><span><i class="sw" style="background:var(--pink);transform:rotate(45deg);width:8px;height:8px"></i>אבן דרך</span></div>';
+      h += '<div class="legend"><span><i class="sw" style="background:var(--ok)"></i>הושלם</span><span><i class="sw" style="background:var(--bad)"></i>באיחור (עבר תאריך היעד)</span><span><i class="sw" style="background:var(--warn)"></i>צפי חריגה מהתוכנית</span><span><i class="sw" style="background:var(--accent)"></i>בביצוע</span><span><i class="sw sw-sup"></i>תלוי בבחירת ספק</span><span><i class="sw sw-crit"></i>נתיב קריטי לעלייה לאוויר</span><span><i class="sw" style="background:var(--bar)"></i>מתוכנן</span><span><i class="sw" style="background:var(--bar-base);height:3px"></i>תוכנית הבסיס (כשיש סטייה)</span><span><i class="sw" style="background:var(--today);width:2px;height:12px"></i>היום</span><span><i class="sw" style="background:var(--pink);transform:rotate(45deg);width:8px;height:8px"></i>אבן דרך</span></div>';
     } else if (S.tab === "overview") h += overview();
     else if (S.tab === "report") h += report();
     else h += attention();
@@ -252,8 +254,8 @@
     function x(n) { return (n - R.lo) * day; }
     var h = '<div class="gantt' + (S.edit ? ' editing' : '') + '" id="gantt" style="--wk:' + wk + 'px;--tlW:' + tlW + 'px"><div class="gin">';
     if (S.edit) h += '<datalist id="owners-all">' + owners().map(function (o) { return '<option value="' + esc(o) + '">'; }).join("") + '</datalist>';
-    h += S.edit ? '<div class="row hdr"><div class="info"><span></span><span></span><span>WBS</span><span>משימה</span><span>אחראי ביצוע</span><span>התחלה</span><span>יעד</span><span>סטטוס</span></div><div class="tl">'
-      : '<div class="row hdr"><div class="info"><span></span><span>WBS</span><span>משימה</span><span class="c-own">אחראי</span><span>יעד / צפי</span><span class="c-st">מצב</span></div><div class="tl">';
+    h += S.edit ? '<div class="row hdr"><div class="info"><span></span><span title="נתיב קריטי לעלייה לאוויר">קריטי</span><span></span><span>WBS</span><span>משימה</span><span>אחראי ביצוע</span><span>התחלה</span><span>יעד</span><span>סטטוס</span></div><div class="tl">'
+      : '<div class="row hdr"><div class="info"><span></span><span>WBS</span><span>משימה</span><span class="c-own">אחראי</span><span class="c-sd">התחלה</span><span>יעד</span><span class="c-st">מצב</span></div><div class="tl">';
     for (var w = 0; w < R.weeks; w++) {
       var a = R.lo + w * 7, cur = TODAY >= a && TODAY <= a + 6;
       h += '<div class="wk' + (cur ? " now" : "") + '" style="right:' + (w * wk) + 'px;width:' + wk + 'px">' + (wk >= 80 ? rg(a, a + 6) : fm(a)) + '</div>';
@@ -266,11 +268,12 @@
     if (!list.length) h += '<div class="empty">אין משימות שתואמות לסינון שנבחר.</div>';
     list.forEach(function (r) {
       var t = r.t, c = C[t.id], st = statusOf(t), ch = (kids[t.id] || []).length;
-      var cls = "row l" + Math.min(r.lvl, 3) + (ch ? " par" : "") + (c.done ? " done" : c.late ? " late" : "") + (S.sel === t.id ? " sel" : "");
+      var cls = "row l" + Math.min(r.lvl, 3) + (ch ? " par" : "") + (c.done ? " done" : c.late ? " late" : "") + (t.critical ? " crit" : "") + (S.sel === t.id ? " sel" : "");
       h += '<div class="' + cls + '" data-id="' + esc(t.id) + '"><div class="info">';
-      if (S.edit) h += '<span class="drag" draggable="true" data-drag="' + esc(t.id) + '" title="גרירה לשינוי מיקום" aria-label="גרירה לשינוי מיקום">' + ICON_GRIP + '</span>';
+      if (S.edit) h += '<span class="drag" draggable="true" data-drag="' + esc(t.id) + '" title="גרירה לשינוי מיקום" aria-label="גרירה לשינוי מיקום">' + ICON_GRIP + '</span>' +
+        '<button class="check ck-crit' + (t.critical ? " on" : "") + '" data-crit="' + esc(t.id) + '" title="נתיב קריטי לעלייה לאוויר" aria-label="נתיב קריטי ' + esc(t.id) + '" aria-pressed="' + !!t.critical + '">' + (t.critical ? ICON_CHECK : "") + '</button>';
       if (ch) h += '<button class="tw' + (S.collapsed[t.id] && !filtering() ? "" : " col") + '" data-tw="' + esc(t.id) + '" aria-label="פתיחה או כיווץ">' + ICON_CHEV + '</button>';
-      else if (S.edit) h += '<button class="check' + (c.done ? " on" : "") + '" data-done="' + esc(t.id) + '" aria-label="סימון כהושלם" aria-pressed="' + c.done + '">' + (c.done ? '<svg width="12" height="12" viewBox="0 0 12 12"><path d="m2.5 6.2 2.4 2.3 4.6-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' : "") + '</button>';
+      else if (S.edit) h += '<button class="check' + (c.done ? " on" : "") + '" data-done="' + esc(t.id) + '" aria-label="סימון כהושלם" aria-pressed="' + c.done + '">' + (c.done ? ICON_CHECK : "") + '</button>';
       else h += '<span></span>';
       h += '<span class="wbs">' + esc(t.id) + '</span>';
       if (S.edit) {
@@ -286,7 +289,7 @@
       } else {
       h += '<span class="nm" style="padding-inline-start:' + (6 + (r.lvl - 1) * 14) + 'px" title="' + esc(t.name) + '">' + esc(t.name) + '</span>';
       h += '<span class="own c-own" title="' + esc(t.owner) + '">' + esc(t.owner) + '</span>';
-      h += '<span class="dt">' + fm(c.fe) + (c.slip && c.be != null && !c.par ? '<span class="was">' + fm(c.be) + '</span>' : "") + '</span>';
+      h += '<span class="dt c-sd">' + fm(c.fs) + '</span><span class="dt">' + fm(c.fe) + '</span>';
       h += '<span class="st c-st"><span class="pill ' + st[0] + '">' + st[1] + '</span></span>';
       }
       h += '</div><div class="tl">';
@@ -385,9 +388,11 @@
         (ch ? '<dt>התקדמות</dt><dd>' + Math.round(c.pct * 100) + '% (' + c.doneN + ' מתוך ' + c.leaves + ' משימות)</dd>' : '') +
         ((t.deps || []).length ? '<dt>תלויה ב-</dt><dd>' + t.deps.map(linkId).join(", ") + '</dd>' : '') +
         (dependents.length ? '<dt>משימות תלויות</dt><dd>' + dependents.map(linkId).join(", ") + '</dd>' : '') +
+        (t.critical ? '<dt>נתיב קריטי</dt><dd>כן, משימה קריטית לעלייה לאוויר</dd>' : '') +
         (t.notes ? '<dt>הערות</dt><dd>' + esc(t.notes) + '</dd>' : '') + '</dl>';
     } else {
       h += fld("name", "שם המשימה", '<input id="e-name" value="' + esc(t.name) + '">');
+      h += '<label class="critf"><input type="checkbox" id="e-critical"' + (t.critical ? " checked" : "") + '> משימה בנתיב הקריטי לעלייה לאוויר' + (ch ? ' (כולל כל תתי-המשימות)' : '') + '</label>';
       h += fld("owner", "אחראי ביצוע", '<input id="e-owner" list="owners" value="' + esc(t.owner) + '"><datalist id="owners">' + owners().map(function (o) { return '<option value="' + esc(o) + '">'; }).join("") + '</datalist>');
       if (!ch) {
         h += '<div class="f2">' + fld("start", "התחלה (תוכנית)", dateIn('id="e-start"', t.start)) + fld("end", "יעד (תוכנית)", dateIn('id="e-end"', t.end)) + '</div>';
@@ -526,6 +531,10 @@
     if (nt && afterId) toast("נוספה משימה " + nt.id + ". המשימות שאחריה קיבלו מספור חדש.");
     var el = document.getElementById("e-name"); if (el) { el.focus(); el.select(); }
   }
+  /* critical-path flag; marking a chapter marks everything under it */
+  function setCrit(t, on) {
+    DATA.tasks.forEach(function (x) { if (x.id === t.id || x.id.indexOf(t.id + ".") === 0) { if (on) x.critical = true; else delete x.critical; } });
+  }
   function toggleDone(id) {
     var t = byId[id]; if (!t) return;
     if (t.status === "done") { t.status = "todo"; t.actualEnd = ""; } else { t.status = "done"; t.actualEnd = TODAY_S; t.forecastEnd = ""; }
@@ -566,6 +575,7 @@
       if (o.name !== t.name) out.push("שם משימה " + t.id + " עודכן");
       if ((o.deps || []).map(function (d) { return o2n[d] || d; }).join() !== (t.deps || []).join()) out.push("עודכנו תלויות של " + n);
       if (o.notes !== t.notes) out.push("עודכנו הערות ב-" + n);
+      if (!!o.critical !== !!t.critical) out.push((t.critical ? "סומנה בנתיב הקריטי: " : "הוסרה מהנתיב הקריטי: ") + n);
     });
     SAVED.tasks.forEach(function (t) { if (!b[t.uid || t.id]) out.push("הוסרה משימה: " + t.id + " " + t.name); });
     if (ren) out.unshift("עודכן סדר המשימות (" + ren + " משימות קיבלו מספר WBS חדש)");
@@ -649,14 +659,14 @@
   }
   /* ---------- local autosave of unpublished edits ---------- */
   var DKEY = "pmo-draft-v2";
-  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function clone(o) { return o === undefined ? undefined : JSON.parse(JSON.stringify(o)); }
   function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
   function dGet() { var s = null; try { s = localStorage.getItem(DKEY); } catch (e) {} if (!s) { try { s = sessionStorage.getItem(DKEY); } catch (e) {} } try { return s ? JSON.parse(s) : null; } catch (e) { return null; } }
   function dSet(o) { var s = JSON.stringify(o), ok = false; try { localStorage.setItem(DKEY, s); ok = true; } catch (e) {} try { sessionStorage.setItem(DKEY, s); ok = true; } catch (e) {} return ok; }
   function dDel() { try { localStorage.removeItem(DKEY); } catch (e) {} try { sessionStorage.removeItem(DKEY); } catch (e) {} }
   function draftObj(extra) { var o = { v: 2, at: new Date().toISOString(), base: { savedAt: SAVED.savedAt, tasks: SAVED.tasks, project: SAVED.project }, tasks: DATA.tasks, project: DATA.project }; if (extra) for (var k in extra) o[k] = extra[k]; return o; }
   function stashDraft() { if (DATA.snapshot) return; if (S.dirty) { if (dSet(draftObj())) S.localAt = new Date(); } else { dDel(); S.localAt = null; } }
-  var TF = ["name", "notes", "start", "end", "owner", "status", "forecastEnd", "actualEnd"], PF = ["title", "client", "subtitle", "goLiveDate", "goLiveTask", "milestones"];
+  var TF = ["name", "notes", "start", "end", "owner", "status", "forecastEnd", "actualEnd", "critical"], PF = ["title", "client", "subtitle", "goLiveDate", "goLiveTask", "milestones"];
   function countChanges(d) {
     var b = {}, m = {}, n = 0;
     d.base.tasks.forEach(function (t) { b[t.uid] = t; }); d.tasks.forEach(function (t) { m[t.uid] = t; });
@@ -763,7 +773,7 @@
     ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true); ev.setUint32(12, cds, true); ev.setUint32(16, off, true);
     return new Blob(parts.concat(cd, [e]), { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   }
-  var XCOLS = [["id", "WBS"], ["name", "משימה"], ["notes", "הערות"], ["start", "תאריך התחלה"], ["end", "תאריך יעד"], ["deps", "תלות (WBS)"], ["owner", "גורם אחראי"], ["status", "סטטוס ביצוע"], ["forecastEnd", "צפי סיום"], ["actualEnd", "סיום בפועל"]];
+  var XCOLS = [["id", "WBS"], ["name", "משימה"], ["notes", "הערות"], ["start", "תאריך התחלה"], ["end", "תאריך יעד"], ["deps", "תלות (WBS)"], ["owner", "גורם אחראי"], ["status", "סטטוס ביצוע"], ["forecastEnd", "צפי סיום"], ["actualEnd", "סיום בפועל"], ["critical", "נתיב קריטי"]];
   var STATUS_HE = { todo: "טרם החל", doing: "בביצוע", supplier: "תלוי בבחירת ספק", done: "הושלם" };
   function xe(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ""); }
   function colL(i) { var s = ""; i++; while (i) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
@@ -777,6 +787,7 @@
         if (k === "start" || k === "end" || k === "forecastEnd" || k === "actualEnd") return v ? '<c r="' + ref + '" s="1"><v>' + (dn(v) + 25569) + '</v></c>' : "";
         if (k === "deps") v = (v || []).join(", ");
         if (k === "status") v = STATUS_HE[v] || v;
+        if (k === "critical") v = v ? "כן" : "";
         return v ? '<c r="' + ref + '" t="inlineStr" s="' + (par && k === "name" ? 3 : 0) + '"><is><t xml:space="preserve">' + xe(v) + '</t></is></c>' : "";
       }).join("") + "</row>";
     });
@@ -860,7 +871,8 @@
     id: ["wbs", "מס'", "מספר"], name: ["משימה", "שם משימה", "שם המשימה"], notes: ["הערות", "הערה"],
     start: ["תאריך התחלה", "התחלה", "התחלה (תוכנית)"], end: ["תאריך יעד", "יעד", "יעד (תוכנית)"],
     deps: ["תלות (wbs)", "תלות", "תלויות"], owner: ["גורם אחראי", "אחראי", "אחראי ביצוע", "אחראים"],
-    status: ["סטטוס ביצוע", "סטטוס", "מצב"], forecastEnd: ["צפי סיום", "צפי סיום מעודכן"], actualEnd: ["סיום בפועל", "תאריך סיום בפועל"]
+    status: ["סטטוס ביצוע", "סטטוס", "מצב"], forecastEnd: ["צפי סיום", "צפי סיום מעודכן"], actualEnd: ["סיום בפועל", "תאריך סיום בפועל"],
+    critical: ["נתיב קריטי", "קריטי", "נתיב קריטי לעלייה לאוויר"]
   };
   var STATUS_IN = { "טרם החל": "todo", "לא התחיל": "todo", "בביצוע": "doing", "תלוי בבחירת ספק": "supplier", "ממתין לספק": "supplier", "הושלם": "done", "בוצע": "done" };
   function normH(s) { return String(s == null ? "" : s).replace(/\s+/g, " ").trim().toLowerCase(); }
@@ -893,6 +905,7 @@
         if (v === "" || v == null) return;
         if (k === "start" || k === "end" || k === "forecastEnd" || k === "actualEnd") { var d = cellDate(v, fy); if (d === null) { P.errors.push(line + " (" + id + "): תאריך לא תקין בעמודה " + XCOLS.filter(function (c) { return c[0] === k; })[0][1]); bad = true; return; } vals[k] = d; }
         else if (k === "status") { var s = STATUS_IN[String(v).trim()]; if (!s) { P.errors.push(line + " (" + id + "): סטטוס לא מוכר \"" + v + "\""); bad = true; return; } vals[k] = s; }
+        else if (k === "critical") { var cv = String(v).trim().toLowerCase(); if (/^(כן|v|x|✓|✔|true|1|yes)$/.test(cv)) vals[k] = true; else if (/^(לא|false|0|no|-)$/.test(cv)) vals[k] = undefined; else { P.errors.push(line + " (" + id + "): ערך לא מוכר בעמודת נתיב קריטי \"" + v + "\" (יש לכתוב כן או לא)"); bad = true; } }
         else if (k === "deps") vals[k] = String(v).split(/[,;\s]+/).map(function (x) { return x.trim(); }).filter(function (x) { return x && x !== id; });
         else vals[k] = String(v).trim();
       });
@@ -906,8 +919,8 @@
     P.missing = DATA.tasks.filter(function (t) { return !P.seen[t.id]; }).map(function (t) { return t.id; });
     return P;
   }
-  var FLD_HE = { name: "שם", notes: "הערות", start: "התחלה", end: "יעד", deps: "תלויות", owner: "אחראי", status: "סטטוס", forecastEnd: "צפי סיום", actualEnd: "סיום בפועל" };
-  function showVal(k, v) { if (v == null || v === "" || (Array.isArray(v) && !v.length)) return "—"; if (k === "status") return STATUS_HE[v] || v; if (Array.isArray(v)) return v.join(", "); if (/start|end|End/.test(k)) return heDate(v); return String(v); }
+  var FLD_HE = { name: "שם", notes: "הערות", start: "התחלה", end: "יעד", deps: "תלויות", owner: "אחראי", status: "סטטוס", forecastEnd: "צפי סיום", actualEnd: "סיום בפועל", critical: "נתיב קריטי" };
+  function showVal(k, v) { if (v == null || v === "" || (Array.isArray(v) && !v.length)) return "—"; if (k === "status") return STATUS_HE[v] || v; if (k === "critical") return v ? "כן" : "—"; if (Array.isArray(v)) return v.join(", "); if (/start|end|End/.test(k)) return heDate(v); return String(v); }
   function importPreview(P, fileName) {
     var m = document.createElement("div"); m.className = "modal";
     var lines = [];
@@ -929,7 +942,7 @@
   }
   function applyImport(P, doDelete) {
     var byIdNow = {}; DATA.tasks.forEach(function (t) { byIdNow[t.id] = t; });
-    P.updates.forEach(function (u) { var t = byIdNow[u.id]; if (!t) return; Object.keys(u.ch).forEach(function (k) { t[k] = clone(u.ch[k][1]); }); if (t.status === "done" && !t.actualEnd) t.actualEnd = t.end || TODAY_S; if (t.status !== "done" && u.ch.status) t.actualEnd = u.ch.actualEnd ? t.actualEnd : ""; });
+    P.updates.forEach(function (u) { var t = byIdNow[u.id]; if (!t) return; Object.keys(u.ch).forEach(function (k) { t[k] = clone(u.ch[k][1]); if (k === "critical" && !t.critical) delete t.critical; }); if (t.status === "done" && !t.actualEnd) t.actualEnd = t.end || TODAY_S; if (t.status !== "done" && u.ch.status) t.actualEnd = u.ch.actualEnd ? t.actualEnd : ""; });
     P.adds.forEach(function (a) {
       var t = { uid: newUid(), id: a.id, name: "משימה חדשה", notes: "", start: "", end: "", deps: [], owner: "", status: "todo", forecastEnd: "", actualEnd: "" };
       Object.keys(a.vals).forEach(function (k) { t[k] = clone(a.vals[k]); });
@@ -1054,6 +1067,7 @@
     var el;
     if ((el = e.target.closest("[data-tw]"))) { var id = el.getAttribute("data-tw"); if (S.collapsed[id]) delete S.collapsed[id]; else S.collapsed[id] = 1; savePref(); rerender(); return; }
     if ((el = e.target.closest("[data-done]"))) { toggleDone(el.getAttribute("data-done")); return; }
+    if ((el = e.target.closest("[data-crit]"))) { var ct = byId[el.getAttribute("data-crit")]; if (ct) { setCrit(ct, !ct.critical); touch(); rerender(); } return; }
     if ((el = e.target.closest("[data-tab]"))) { S.tab = el.getAttribute("data-tab"); savePref(); render(); return; }
     if ((el = e.target.closest("[data-f]"))) { S.filter = el.getAttribute("data-f"); rerender(); return; }
     if ((el = e.target.closest("[data-open]"))) { e.preventDefault(); S.sel = el.getAttribute("data-open"); if (MOB && !e.target.closest(".drawer")) { rerender(); return; }  /* on a phone keep the summary and open the task card over it */
@@ -1125,7 +1139,8 @@
     if (ds_.mk != null && ds_.mi != null) { var ms = DATA.project.milestones[+ds_.mi]; if (ms) { ms[ds_.mk] = e.target.value; touch(); rerender(); } return; }
     var t = S.sel && byId[S.sel]; if (!t || id.indexOf("e-") !== 0) return;
     var k = id.slice(2), v = e.target.value;
-    if (k === "deps") t.deps = v.split(/[,\s;]+/).map(function (x) { return x.trim(); }).filter(function (x) { return x && x !== t.id; });
+    if (k === "critical") setCrit(t, e.target.checked);
+    else if (k === "deps") t.deps = v.split(/[,\s;]+/).map(function (x) { return x.trim(); }).filter(function (x) { return x && x !== t.id; });
     else if (k === "status") { t.status = v; if (v === "done") { t.actualEnd = t.actualEnd || TODAY_S; t.forecastEnd = ""; } else t.actualEnd = ""; }
     else if (k === "start" || k === "end" || k === "forecastEnd" || k === "actualEnd") t[k] = v;
     else return;
