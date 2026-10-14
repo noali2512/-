@@ -15,10 +15,10 @@
   var MOB = !!(window.matchMedia && window.matchMedia("(max-width: 760px)").matches), SNAP = !!DATA.snapshot;
   var TABK = SNAP ? "tabS" : MOB ? "tabM" : "tab";
   var S = {
-    tab: SNAP || MOB ? "exec" : "gantt", edit: false, canEdit: false, dl: null, sel: null,
+    tab: "exec", edit: false, canEdit: false, dl: null, sel: null,
     q: "", owners: [], ownOpen: false, ownQ: "", filter: "all", zoom: 84, collapsed: {}, dirty: false, saving: false, rp: "daily", rpDate: ""
   };
-  try { var pref = JSON.parse(localStorage.getItem("pmo-pref") || "{}"); if (pref.zoom) S.zoom = pref.zoom; if (pref.collapsed) S.collapsed = pref.collapsed; if (pref[TABK] && !SNAP) S.tab = pref[TABK]; } catch (e) {}
+  try { var pref = JSON.parse(localStorage.getItem("pmo-pref") || "{}"); if (pref.zoom) S.zoom = pref.zoom; if (pref.collapsed) S.collapsed = pref.collapsed; if (pref[TABK] && !SNAP) S.tab = pref[TABK] === "attn" ? "crit" : pref[TABK]; } catch (e) {}
   function savePref() { try { var pr = JSON.parse(localStorage.getItem("pmo-pref") || "{}"); pr.zoom = S.zoom; pr.collapsed = S.collapsed; pr[TABK] = S.tab; localStorage.setItem("pmo-pref", JSON.stringify(pr)); } catch (e) {} }
 
   /* ---------- dates ---------- */
@@ -217,7 +217,7 @@
       kpi("Go-Live צפוי", glDate != null ? fmy(glDate) : "—", '<span class="note">' + (gl ? (glDelta > 0 ? "דחייה של " + glDelta + " ימים" : "לפי התוכנית") : "") + '</span>', glDelta > 0 ? "bad" : "") +
       '</section>';
     h += '<div class="bar-row"><div class="tabs" role="tablist">' +
-      tab("exec", "מבט הנהלה") + tab("overview", "תמונת מצב") + tab("gantt", "גאנט") + tab("attn", "לטיפול" + (late ? " (" + late + ")" : "")) + tab("report", "דוח יומי / שבועי") + '</div>';
+      tab("exec", "מבט הנהלה") + tab("overview", "תמונת מצב") + tab("gantt", "גאנט") + tab("crit", "נתיב קריטי") + tab("report", "דוח יומי / שבועי") + '</div>';
     if (S.tab === "gantt") {
       h += '<div class="tools"><input type="search" id="q" placeholder="חיפוש משימה, WBS או אחראי" value="' + esc(S.q) + '" aria-label="חיפוש">' +
         ownerFilter() +
@@ -234,7 +234,7 @@
     } else if (S.tab === "exec") h += execView(glDate, glDelta);
     else if (S.tab === "overview") h += overview();
     else if (S.tab === "report") h += report();
-    else h += attention();
+    else h += critView();
     app.innerHTML = h;
     renderDrawer();
   }
@@ -325,7 +325,7 @@
       var h = '<h3>' + title + ' <span class="note">(' + arr.length + ')</span></h3><div class="list">';
       if (!arr.length) h += '<div class="note">' + emptyTxt + '</div>';
       arr.slice(0, 6).forEach(function (t) { var st = statusOf(t); h += '<div class="li" data-open="' + esc(t.id) + '"><span class="wbs">' + esc(t.id) + '</span><span><div>' + esc(t.name) + '</div><div class="o">' + (f === "late" ? "יעד " + fm(C[t.id].fe) + " · " + (TODAY - C[t.id].fe === 1 ? "יום איחור אחד" : (TODAY - C[t.id].fe) + " ימי איחור") : "יעד " + fm(C[t.id].fe)) + '</div></span><span class="pill ' + st[0] + '">' + st[1] + '</span></div>'; });
-      if (arr.length > 6) h += '<button class="btn sm more" data-tab="attn">' + (arr.length - 6 === 1 ? "ועוד משימה אחת" : "ועוד " + (arr.length - 6) + " משימות") + '</button>';
+      if (arr.length > 6) h += '<button class="btn sm more" data-show="' + (f === "late" ? "late" : "soon") + '">' + (arr.length - 6 === 1 ? "ועוד משימה אחת" : "ועוד " + (arr.length - 6) + " משימות") + '</button>';
       return h + '</div>';
     }
     var nextMs = (DATA.project.milestones || []).map(function (m) { return { v: dn(m.date), l: m.label }; }).filter(function (m) { return m.v != null && m.v >= TODAY; }).sort(function (a, b) { return a.v - b.v; })[0];
@@ -449,7 +449,7 @@
     h += '</section>';
     // delays + decisions
     h += '<div class="x-2"><section class="card"><h2>משימות בעיכוב <span class="note">(' + late.length + ')</span></h2><div class="list">' +
-      (late.length ? late.slice(0, 6).map(function (t) { var d = TODAY - C[t.id].fe; return line(t, "יעד " + fmy(C[t.id].fe) + " · " + (d === 1 ? "יום איחור אחד" : d + " ימי איחור") + (t.owner ? " · " + esc(t.owner) : "")); }).join("") + (late.length > 6 ? '<button class="btn sm more" data-tab="attn">לכל המשימות בעיכוב</button>' : '') : '<div class="note">אין משימות בעיכוב.</div>') + '</div></section>' +
+      (late.length ? late.slice(0, 6).map(function (t) { var d = TODAY - C[t.id].fe; return line(t, "יעד " + fmy(C[t.id].fe) + " · " + (d === 1 ? "יום איחור אחד" : d + " ימי איחור") + (t.owner ? " · " + esc(t.owner) : "")); }).join("") + (late.length > 6 ? '<button class="btn sm more" data-show="late">לכל המשימות בעיכוב</button>' : '') : '<div class="note">אין משימות בעיכוב.</div>') + '</div></section>' +
       '<section class="card"><h2>החלטות ואישורים בשבועיים הקרובים <span class="note">(' + dec.length + ')</span></h2><div class="list">' +
       (dec.length ? dec.slice(0, 6).map(function (t) { return line(t, "יעד " + fmy(C[t.id].fe) + (t.owner ? " · " + esc(t.owner) : "")); }).join("") : '<div class="note">אין החלטות פתוחות בשבועיים הקרובים.</div>') + '</div></section></div>';
     // chapters
@@ -461,6 +461,39 @@
   }
   function execWeek() { return fmISO(TODAY - new Date(TODAY * 864e5).getUTCDay()); }
   function fmISO(n) { return new Date(n * 864e5).toISOString().slice(0, 10); }
+  /* critical path to go-live: summary, what needs attention, then every critical task by chapter */
+  function critView() {
+    var L = leaves(), crit = L.filter(function (t) { return t.critical; });
+    function byFe(a, b) { return (C[a.id].fe || 0) - (C[b.id].fe || 0); }
+    if (!crit.length) return '<div class="card"><h2>הנתיב הקריטי לעלייה לאוויר</h2><div class="note">עדיין לא סומנו משימות בנתיב הקריטי. מסמנים במצב עריכה, בעמודת "קריטי" (עיגול הדגל).</div></div>';
+    function kind(t) { var c = C[t.id]; return c.done ? "d" : c.late ? "l" : (c.slip > 0 || t.status === "supplier" || t.status === "noref") ? "w" : "o"; }
+    var cnt = { d: 0, o: 0, w: 0, l: 0 }; crit.forEach(function (t) { cnt[kind(t)]++; });
+    var seg = [["d", "הושלמו"], ["o", "במסלול"], ["w", "בסיכון או ממתינות"], ["l", "בעיכוב"]];
+    var open = crit.filter(function (t) { return !C[t.id].done; }), risk = open.filter(function (t) { return kind(t) === "l" || kind(t) === "w"; }).sort(byFe);
+    var next = open.filter(function (t) { var c = C[t.id]; return kind(t) === "o" && c.fe != null && c.fe <= TODAY + 14; }).sort(byFe);
+    var last = open.reduce(function (m, t) { var v = C[t.id].fe; return v != null && (m == null || v > m) ? v : m; }, null);
+    function more(n) { return n > 10 ? '<div class="note" style="padding:8px 4px 0">' + (n - 10 === 1 ? "ועוד משימה אחת" : "ועוד " + (n - 10) + " משימות") + ' – ברשימה המלאה למטה.</div>' : ''; }
+    function row(t) {
+      var c = C[t.id], st = statusOf(t), p = parentOf(t.id), pt = p && p.indexOf(".") > 0 && byId[p];
+      return '<div class="cr-row k-' + kind(t) + '" data-open="' + esc(t.id) + '"><span class="wbs">' + esc(t.id) + '</span><span class="cr-n"><div>' + esc(t.name) + '</div>' + (pt ? '<div class="o">שייכת ל: ' + esc(pt.id + " " + pt.name) + '</div>' : '') + '</span>' +
+        '<span class="cr-o">' + esc(t.owner || "—") + '</span><span class="dt sd">' + fm(c.fs) + '</span><span class="dt">' + fm(c.fe) + '</span><span><span class="pill ' + st[0] + '">' + st[1] + '</span></span></div>';
+    }
+    var h = '<div class="exec"><section class="card x-crit"><div class="x-ttl"><h2>הנתיב הקריטי לעלייה לאוויר <span class="note">' + crit.length + ' משימות' + (last != null ? ' · סיום צפוי של אחרונת המשימות הפתוחות: ' + fmy(last) : '') + '</span></h2>' +
+      '<button class="btn sm" data-show="crit">הצגה בגאנט</button></div>' +
+      '<div class="crit-stack">' + seg.filter(function (x) { return cnt[x[0]]; }).map(function (x) { return '<i class="' + x[0] + '" style="flex:' + cnt[x[0]] + '" title="' + x[1] + ': ' + cnt[x[0]] + '">' + (cnt[x[0]] / crit.length > .06 ? cnt[x[0]] : "") + '</i>'; }).join("") + '</div>' +
+      '<div class="crit-leg">' + seg.map(function (x) { return '<span><i class="' + x[0] + '"></i>' + x[1] + ' <b>' + cnt[x[0]] + '</b></span>'; }).join("") + '</div></section>';
+    h += '<div class="x-2"><section class="card"><h2>בעיכוב או בסיכון <span class="note">(' + risk.length + ')</span></h2><div class="cr-list">' + (risk.length ? risk.slice(0, 10).map(row).join("") + more(risk.length) : '<div class="note">אין משימות קריטיות בעיכוב או בסיכון.</div>') + '</div></section>' +
+      '<section class="card"><h2>הצעדים הבאים בשבועיים הקרובים <span class="note">(' + next.length + ')</span></h2><div class="cr-list">' + (next.length ? next.slice(0, 10).map(row).join("") + more(next.length) : '<div class="note">אין משימות קריטיות עם יעד בשבועיים הקרובים.</div>') + '</div></section></div>';
+    var g = {}, order = [];
+    crit.forEach(function (t) { var k = t.id.split(".")[0]; if (!g[k]) { g[k] = []; order.push(k); } g[k].push(t); });
+    order.sort(function (a, b) { return +a - +b; });
+    h += '<section class="card"><h2>כל המשימות בנתיב הקריטי, לפי תחום</h2><div class="cr-head"><span>WBS</span><span>משימה</span><span class="cr-o">אחראי</span><span>התחלה</span><span>יעד</span><span>מצב</span></div>' +
+      order.map(function (k) {
+        var items = g[k].slice().sort(byFe), dn_ = items.filter(function (t) { return C[t.id].done; }).length;
+        return '<details class="cr-g"' + (items.some(function (t) { return !C[t.id].done; }) ? " open" : "") + '><summary><span class="wbs">' + esc(k) + '</span><b>' + esc(byId[k] ? byId[k].name : "") + '</b><span class="note">' + dn_ + '/' + items.length + ' הושלמו</span></summary>' + items.map(row).join("") + '</details>';
+      }).join("") + '</section>';
+    return h + '</div>';
+  }
   function attention() {
     var L = leaves();
     function block(title, arr, emptyTxt, dateFn) {
@@ -1206,6 +1239,7 @@
     if ((el = e.target.closest("[data-crit]"))) { var ct = byId[el.getAttribute("data-crit")]; if (ct) { setCrit(ct, !ct.critical); touch(); rerender(); } return; }
     if ((el = e.target.closest("[data-tab]"))) { S.tab = el.getAttribute("data-tab"); savePref(); render(); return; }
     if ((el = e.target.closest("[data-f]"))) { S.filter = el.getAttribute("data-f"); rerender(); return; }
+    if ((el = e.target.closest("[data-show]"))) { S.tab = "gantt"; S.filter = el.getAttribute("data-show"); S.q = ""; S.owners = []; savePref(); render(); return; }
     if ((el = e.target.closest("[data-open]"))) { e.preventDefault(); S.sel = el.getAttribute("data-open"); if (MOB && !e.target.closest(".drawer")) { rerender(); return; }  /* on a phone keep the summary and open the task card over it */
       if (!e.target.closest(".drawer")) { S.tab = "gantt"; var p = parentOf(S.sel); while (p) { delete S.collapsed[p]; p = parentOf(p); } S.filter = "all"; S.q = ""; S.owners = []; render(); scrollToSel(); } else { rerender(); } return; }
     if ((el = e.target.closest("[data-a]"))) {
