@@ -15,7 +15,7 @@
   var MOB = !!(window.matchMedia && window.matchMedia("(max-width: 760px)").matches), SNAP = !!DATA.snapshot;
   var TABK = SNAP ? "tabS" : MOB ? "tabM" : "tab";
   var S = {
-    tab: SNAP || MOB ? "overview" : "gantt", edit: false, canEdit: false, dl: null, sel: null,
+    tab: SNAP || MOB ? "exec" : "gantt", edit: false, canEdit: false, dl: null, sel: null,
     q: "", owners: [], ownOpen: false, ownQ: "", filter: "all", zoom: 84, collapsed: {}, dirty: false, saving: false, rp: "daily", rpDate: ""
   };
   try { var pref = JSON.parse(localStorage.getItem("pmo-pref") || "{}"); if (pref.zoom) S.zoom = pref.zoom; if (pref.collapsed) S.collapsed = pref.collapsed; if (pref[TABK] && !SNAP) S.tab = pref[TABK]; } catch (e) {}
@@ -114,13 +114,14 @@
     if (c.par) return c.done ? ["p-done", "הושלם"] : c.late ? ["p-late", c.lateN + " באיחור"] : c.doneN ? ["p-doing", Math.round(c.pct * 100) + "%"] : ["p-todo", "0%"];
     if (c.done) return ["p-done", "הושלם"];
     if (t.status === "supplier") return c.late ? ["p-sup late", "ממתין לספק +" + (TODAY - c.fe)] : ["p-sup", "ממתין לספק"];
+    if (t.status === "noref") return c.late ? ["p-ref late", "ממתין לרפרנט +" + (TODAY - c.fe)] : ["p-ref", "ממתין לרפרנט"];
     if (c.late) return ["p-late", "באיחור " + (TODAY - c.fe) + " ימ׳"];
     if (c.slip > 0) return ["p-slip", "חריגה +" + c.slip];
     if (t.status === "doing") return ["p-doing", "בביצוע"];
     if (c.missing) return ["p-miss", "חסר תאריך"];
     return ["p-todo", "טרם החל"];
   }
-  function barCls(t) { var c = C[t.id]; return c.done ? "done" : t.status === "supplier" ? "sup" : c.late ? "late" : c.slip > 0 ? "slip" : t.status === "doing" ? "doing" : ""; }
+  function barCls(t) { var c = C[t.id]; return c.done ? "done" : t.status === "supplier" ? "sup" : t.status === "noref" ? "ref" : c.late ? "late" : c.slip > 0 ? "slip" : t.status === "doing" ? "doing" : ""; }
 
   /* ---------- rows / filters ---------- */
   function filtering() { return !!(S.q || S.owners.length || S.filter !== "all"); }
@@ -138,6 +139,7 @@
       case "slip": return c.slip > 0 && !c.done;
       case "sup": return !c.done && t.status === "supplier";
       case "crit": return !!t.critical;
+      case "ref": return !c.done && t.status === "noref";
       case "open": return !c.done;
       case "done": return c.done;
     }
@@ -206,7 +208,7 @@
         (S.dirty ? '<button class="btn sm" data-a="discard">ביטול שינויים</button>' : '') +
         '<button class="btn primary sm" data-a="save" ' + (!S.dirty || S.saving ? "disabled" : "") + '>' + (S.saving ? "מפרסם…" : "פרסום השינויים") + '</button></div>';
     }
-    h += '<section class="kpis" aria-label="תמונת מצב">' +
+    if (S.tab !== "exec") h += '<section class="kpis" aria-label="תמונת מצב">' +
       kpi("התקדמות כוללת", pct + '<small>%</small>', '<div class="meter"><i style="width:' + pct + '%"></i></div>', "") +
       kpi("משימות שהושלמו", done + ' <small>מתוך ' + L.length + '</small>', "", "ok") +
       kpi("באיחור", late, "", late ? "bad" : "") +
@@ -215,7 +217,7 @@
       kpi("Go-Live צפוי", glDate != null ? fmy(glDate) : "—", '<span class="note">' + (gl ? (glDelta > 0 ? "דחייה של " + glDelta + " ימים" : "לפי התוכנית") : "") + '</span>', glDelta > 0 ? "bad" : "") +
       '</section>';
     h += '<div class="bar-row"><div class="tabs" role="tablist">' +
-      tab("overview", "תמונת מצב") + tab("gantt", "גאנט") + tab("attn", "לטיפול" + (late ? " (" + late + ")" : "")) + tab("report", "דוח יומי / שבועי") + '</div>';
+      tab("exec", "מבט הנהלה") + tab("overview", "תמונת מצב") + tab("gantt", "גאנט") + tab("attn", "לטיפול" + (late ? " (" + late + ")" : "")) + tab("report", "דוח יומי / שבועי") + '</div>';
     if (S.tab === "gantt") {
       h += '<div class="tools"><input type="search" id="q" placeholder="חיפוש משימה, WBS או אחראי" value="' + esc(S.q) + '" aria-label="חיפוש">' +
         ownerFilter() +
@@ -224,12 +226,13 @@
     }
     h += '</div>';
     if (S.tab === "gantt") {
-      h += '<div class="chips" role="group" aria-label="סינון לפי מצב">' + [["all", "הכול"], ["open", "פתוחות"], ["late", "באיחור"], ["soon", "יעד בשבוע הקרוב"], ["slip", "צפי חריגה"], ["sup", "תלוי בבחירת ספק"], ["crit", "נתיב קריטי"], ["done", "הושלמו"]].map(function (x) {
+      h += '<div class="chips" role="group" aria-label="סינון לפי מצב">' + [["all", "הכול"], ["open", "פתוחות"], ["late", "באיחור"], ["soon", "יעד בשבוע הקרוב"], ["slip", "צפי חריגה"], ["sup", "תלוי בבחירת ספק"], ["ref", "ממתין לרפרנט"], ["crit", "נתיב קריטי"], ["done", "הושלמו"]].map(function (x) {
         return '<button class="chipbtn" data-f="' + x[0] + '" aria-pressed="' + (S.filter === x[0]) + '">' + x[1] + '</button>';
       }).join("") + '</div>';
       h += gantt();
-      h += '<div class="legend"><span><i class="sw" style="background:var(--ok)"></i>הושלם</span><span><i class="sw" style="background:var(--bad)"></i>באיחור (עבר תאריך היעד)</span><span><i class="sw" style="background:var(--warn)"></i>צפי חריגה מהתוכנית</span><span><i class="sw" style="background:var(--accent)"></i>בביצוע</span><span><i class="sw sw-sup"></i>תלוי בבחירת ספק</span><span><i class="sw sw-crit"></i>נתיב קריטי לעלייה לאוויר</span><span><i class="sw" style="background:var(--bar)"></i>מתוכנן</span><span><i class="sw" style="background:var(--bar-base);height:3px"></i>תוכנית הבסיס (כשיש סטייה)</span><span><i class="sw" style="background:var(--today);width:2px;height:12px"></i>היום</span><span><i class="sw" style="background:var(--pink);transform:rotate(45deg);width:8px;height:8px"></i>אבן דרך</span></div>';
-    } else if (S.tab === "overview") h += overview();
+      h += '<div class="legend"><span><i class="sw" style="background:var(--ok)"></i>הושלם</span><span><i class="sw" style="background:var(--bad)"></i>באיחור (עבר תאריך היעד)</span><span><i class="sw" style="background:var(--warn)"></i>צפי חריגה מהתוכנית</span><span><i class="sw" style="background:var(--accent)"></i>בביצוע</span><span><i class="sw sw-sup"></i>תלוי בבחירת ספק</span><span><i class="sw sw-ref"></i>טרם התקבל עדכון מרפרנט</span><span><i class="sw sw-crit"></i>נתיב קריטי לעלייה לאוויר</span><span><i class="sw" style="background:var(--bar)"></i>מתוכנן</span><span><i class="sw" style="background:var(--bar-base);height:3px"></i>תוכנית הבסיס (כשיש סטייה)</span><span><i class="sw" style="background:var(--today);width:2px;height:12px"></i>היום</span><span><i class="sw" style="background:var(--pink);transform:rotate(45deg);width:8px;height:8px"></i>אבן דרך</span></div>';
+    } else if (S.tab === "exec") h += execView(glDate, glDelta);
+    else if (S.tab === "overview") h += overview();
     else if (S.tab === "report") h += report();
     else h += attention();
     app.innerHTML = h;
@@ -285,7 +288,7 @@
         else {
           h += '<span>' + dateIn('class="ie" data-t="' + tid + '" data-k="start" aria-label="התחלה ' + tid + '"', t.start) + '</span>';
           h += '<span>' + dateIn('class="ie" data-t="' + tid + '" data-k="end" aria-label="יעד ' + tid + '"', t.end) + '</span>';
-          h += '<span><select class="ie st-' + (c.late ? 'late' : t.status) + '" data-t="' + tid + '" data-k="status" aria-label="סטטוס ' + tid + '">' + [["todo", "טרם החל"], ["doing", "בביצוע"], ["supplier", "תלוי בבחירת ספק"], ["done", "הושלם"]].map(function (o) { return '<option value="' + o[0] + '"' + (t.status === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") + '</select></span>';
+          h += '<span><select class="ie st-' + (c.late ? 'late' : t.status) + '" data-t="' + tid + '" data-k="status" aria-label="סטטוס ' + tid + '">' + [["todo", "טרם החל"], ["doing", "בביצוע"], ["supplier", "תלוי בבחירת ספק"], ["noref", "ממתין לעדכון רפרנט"], ["done", "הושלם"]].map(function (o) { return '<option value="' + o[0] + '"' + (t.status === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") + '</select></span>';
         }
       } else {
       h += '<span class="nm" style="padding-inline-start:' + (6 + (r.lvl - 1) * 14) + 'px" title="' + esc(t.name) + '">' + esc(t.name) + '</span>';
@@ -350,6 +353,81 @@
     h += '</div></div></div>';
     return h;
   }
+  /* one-page management view: where we stand, this week, next week, critical path, delays, decisions */
+  function execView(glDate, glDelta) {
+    var L = leaves(), dow = new Date(TODAY * 864e5).getUTCDay(), w0 = TODAY - dow, w1 = w0 + 6, n0 = w0 + 7, n1 = w0 + 13;
+    var done = L.filter(function (t) { return C[t.id].done; }).length, pct = L.length ? Math.round(done / L.length * 100) : 0;
+    var late = L.filter(function (t) { return C[t.id].late; }).sort(function (a, b) { return C[a.id].fe - C[b.id].fe; });
+    var crit = L.filter(function (t) { return t.critical; }), critOpen = crit.filter(function (t) { return !C[t.id].done; });
+    var critRisk = critOpen.filter(function (t) { var c = C[t.id]; return c.late || c.slip > 0 || t.status === "supplier" || t.status === "noref"; });
+    var toGl = glDate != null ? glDate - TODAY : null;
+    /* red only when Go-Live itself moves; delays that Go-Live still absorbs are amber */
+    var health = glDelta > 0 ? ["bad", "Go-Live בסיכון"] : late.length || critRisk.length ? ["warn", "דורש תשומת לב"] : ["ok", "בתוכנית"];
+    function chap(t) { return t.id.split(".")[0]; }
+    /* short generic names ("גיוס") read better with their parent ("מנהל אתר – גיוס") */
+    function label(t) { var p = parentOf(t.id), pt = p && p.indexOf(".") > 0 && byId[p]; return pt && t.name.length < 16 ? pt.name + " – " + t.name : t.name; }
+    function grouped(arr) {
+      var g = {}, order = [];
+      arr.forEach(function (t) { var k = chap(t); if (!g[k]) { g[k] = []; order.push(k); } g[k].push(t); });
+      order.sort(function (a, b) { return +a - +b; });
+      if (!order.length) return '<div class="note">אין פריטים לתקופה זו.</div>';
+      var rest = order.slice(6); order = order.slice(0, 6);
+      return '<div class="xg">' + order.map(function (k) {
+        var items = g[k], r = byId[k];
+        return '<div class="xg-r"><div class="xg-h"><span class="wbs">' + esc(k) + '</span><b>' + esc(r ? r.name : "") + '</b><span class="xg-n">' + items.length + '</span></div><ul>' +
+          items.slice(0, 2).map(function (t) { return '<li data-open="' + esc(t.id) + '"' + (t.critical ? ' class="xc"' : '') + '>' + esc(label(t)) + '</li>'; }).join("") +
+          (items.length > 2 ? '<li class="more">' + (items.length - 2 === 1 ? "ועוד משימה אחת" : "ועוד " + (items.length - 2) + " משימות") + '</li>' : '') + '</ul></div>';
+      }).join("") + (rest.length ? '<div class="note">ועוד: ' + rest.map(function (k) { return esc(byId[k] ? byId[k].name : k) + " (" + g[k].length + ")"; }).join(" · ") + '</div>' : '') + '</div>';
+    }
+    var doneW = L.filter(function (t) { var v = dn(t.actualEnd); return C[t.id].done && v != null && v >= w0 && v <= TODAY; });
+    var nextW = L.filter(function (t) { var c = C[t.id]; return !c.done && ((c.fe != null && c.fe >= n0 && c.fe <= n1) || (c.fs != null && c.fs >= n0 && c.fs <= n1)); });
+    var restW = L.filter(function (t) { var c = C[t.id]; return !c.done && c.fe != null && c.fe >= TODAY && c.fe <= w1; });
+    var dec = L.filter(function (t) { var c = C[t.id]; return !c.done && c.fe != null && c.fe <= TODAY + 14 && /החלט|ועדת היגוי|בחירת|אישור|חתימ/.test(t.name); }).sort(function (a, b) { return C[a.id].fe - C[b.id].fe; });
+    function line(t, note) { var st = statusOf(t); return '<div class="li" data-open="' + esc(t.id) + '"><span class="wbs">' + esc(t.id) + '</span><span><div>' + esc(t.name) + '</div><div class="o">' + note + '</div></span><span class="pill ' + st[0] + '">' + st[1] + '</span></div>'; }
+    var h = '<div class="exec">';
+    // headline
+    h += '<section class="x-head"><div class="x-light ' + health[0] + '"><i></i><div><div class="l">מצב התוכנית</div><b>' + health[1] + '</b></div></div>' +
+      '<div class="x-k"><div class="l">Go-Live צפוי</div><b>' + fmy(glDate) + '</b><span class="note">' + (glDelta > 0 ? "דחייה של " + glDelta + " ימים" : "לפי התוכנית") + (toGl != null && toGl >= 0 ? " · בעוד " + toGl + " ימים" : "") + '</span></div>' +
+      '<div class="x-k"><div class="l">התקדמות כוללת</div><b>' + pct + '%</b><div class="meter"><i style="width:' + pct + '%"></i></div><span class="note">' + done + ' מתוך ' + L.length + ' משימות</span></div>' +
+      '<div class="x-k' + (late.length ? " bad" : "") + '"><div class="l">משימות בעיכוב</div><b>' + late.length + '</b><span class="note">' + (late.length ? "עבר תאריך היעד" : "אין עיכובים") + '</span></div>' +
+      '<div class="x-k' + (critRisk.length ? " warn" : "") + '"><div class="l">נתיב קריטי</div><b>' + (crit.length ? Math.round((crit.length - critOpen.length) / crit.length * 100) + "%" : "—") + '</b><span class="note">' + (crit.length ? (crit.length - critOpen.length) + " מתוך " + crit.length + " הושלמו" + (critRisk.length ? " · " + critRisk.length + " בסיכון" : "") : "טרם סומנו משימות קריטיות") + '</span></div></section>';
+    // road to go-live
+    var ms = (DATA.project.milestones || []).map(function (m) { return { v: dn(m.date), l: m.label }; }).filter(function (m) { return m.v != null; }).sort(function (a, b) { return a.v - b.v; });
+    if (ms.length) {
+      var a = Math.min(ms[0].v, TODAY), b = Math.max(ms[ms.length - 1].v, glDate || 0, TODAY), span = Math.max(b - a, 1), pos = function (v) { return ((v - a) / span * 100).toFixed(2); };
+      h += '<section class="card x-road"><h2>הדרך ל-Go-Live</h2><div class="road"><div class="road-line"></div><div class="road-done" style="width:' + pos(TODAY) + '%"></div>' +
+        ms.map(function (m, i) { return '<div class="road-m' + (m.v < TODAY ? " past" : "") + (i % 2 ? " dn" : "") + '" style="right:' + pos(m.v) + '%"><i></i><span><b>' + fm(m.v) + '</b>' + esc(m.l) + '</span></div>'; }).join("") +
+        '<div class="road-today" style="right:' + pos(TODAY) + '%"><span>היום ' + fm(TODAY) + '</span></div></div></section>';
+    }
+    // this week / next week
+    h += '<div class="x-2"><section class="card"><h2>מה בוצע השבוע <span class="note">' + rg(w0, TODAY) + ' · ' + doneW.length + ' משימות</span></h2>' + grouped(doneW) + '</section>' +
+      '<section class="card"><h2>מה מתוכנן לשבוע הבא <span class="note">' + rg(n0, n1) + ' · ' + nextW.length + ' משימות</span></h2>' + grouped(nextW) +
+      (restW.length ? '<div class="note" style="margin-top:8px">ועוד ' + restW.length + ' משימות פתוחות עם יעד עד סוף השבוע הנוכחי.</div>' : '') + '</section></div>';
+    // critical path
+    h += '<section class="card x-crit"><h2>הנתיב הקריטי לעלייה לאוויר</h2>';
+    if (!crit.length) h += '<div class="note">עדיין לא סומנו משימות בנתיב הקריטי. מסמנים במצב עריכה, בעמודת "קריטי" (עיגול הדגל).</div>';
+    else {
+      var cs = critOpen.slice().sort(function (x, y) { return (C[x.id].fe || 0) - (C[y.id].fe || 0); });
+      var cnt = { d: 0, o: 0, w: 0, l: 0 };
+      crit.forEach(function (t) { var c = C[t.id]; cnt[c.done ? "d" : c.late ? "l" : (c.slip > 0 || t.status === "supplier" || t.status === "noref") ? "w" : "o"]++; });
+      var seg = [["d", "הושלמו"], ["o", "במסלול"], ["w", "בסיכון או ממתינות"], ["l", "בעיכוב"]];
+      h += '<div class="crit-stack">' + seg.filter(function (x) { return cnt[x[0]]; }).map(function (x) { return '<i class="' + x[0] + '" style="flex:' + cnt[x[0]] + '" title="' + x[1] + ': ' + cnt[x[0]] + '">' + (cnt[x[0]] / crit.length > .06 ? cnt[x[0]] : "") + '</i>'; }).join("") + '</div>' +
+        '<div class="crit-leg">' + seg.map(function (x) { return '<span><i class="' + x[0] + '"></i>' + x[1] + ' <b>' + cnt[x[0]] + '</b></span>'; }).join("") + '<span class="note">סך הכול ' + crit.length + ' משימות בנתיב הקריטי</span></div>';
+      h += '<h3>הצעדים הקריטיים הבאים</h3><div class="list">' + (cs.length ? cs.slice(0, 6).map(function (t) { return line(t, "יעד " + fmy(C[t.id].fe) + (t.owner ? " · " + esc(t.owner) : "")); }).join("") : '<div class="note">כל המשימות בנתיב הקריטי הושלמו.</div>') + '</div>';
+    }
+    h += '</section>';
+    // delays + decisions
+    h += '<div class="x-2"><section class="card"><h2>משימות בעיכוב <span class="note">(' + late.length + ')</span></h2><div class="list">' +
+      (late.length ? late.slice(0, 6).map(function (t) { var d = TODAY - C[t.id].fe; return line(t, "יעד " + fmy(C[t.id].fe) + " · " + (d === 1 ? "יום איחור אחד" : d + " ימי איחור") + (t.owner ? " · " + esc(t.owner) : "")); }).join("") + (late.length > 6 ? '<button class="btn sm more" data-tab="attn">לכל המשימות בעיכוב</button>' : '') : '<div class="note">אין משימות בעיכוב.</div>') + '</div></section>' +
+      '<section class="card"><h2>החלטות ואישורים בשבועיים הקרובים <span class="note">(' + dec.length + ')</span></h2><div class="list">' +
+      (dec.length ? dec.slice(0, 6).map(function (t) { return line(t, "יעד " + fmy(C[t.id].fe) + (t.owner ? " · " + esc(t.owner) : "")); }).join("") : '<div class="note">אין החלטות פתוחות בשבועיים הקרובים.</div>') + '</div></section></div>';
+    // chapters
+    h += '<section class="card"><h2>התקדמות לפי תחום</h2><div class="x-sec">' + roots.filter(function (t) { return C[t.id].leaves; }).map(function (t) {
+      var c = C[t.id], pc = Math.round(c.pct * 100);
+      return '<div class="xs" data-open="' + esc(t.id) + '"><span class="t" title="' + esc(t.name) + '">' + esc(t.name) + '</span><span class="meter"><i style="width:' + pc + '%;' + (c.lateN ? "background:var(--bad)" : "") + '"></i></span><b>' + pc + '%</b></div>';
+    }).join("") + '</div></section>';
+    return h + '</div>';
+  }
   function attention() {
     var L = leaves();
     function block(title, arr, emptyTxt, dateFn) {
@@ -364,6 +442,7 @@
     h += block("יעד ב-7 הימים הקרובים", L.filter(function (t) { return C[t.id].soon; }).sort(byFe), "אין משימות שמסתיימות בשבוע הקרוב.", function (t) { return "יעד " + fmy(C[t.id].fe); });
     h += '</div><div style="display:flex;flex-direction:column;gap:16px">';
     h += block("ממתינות לבחירת ספק", L.filter(function (t) { return t.status === "supplier" && !C[t.id].done; }).sort(byFe), "אין משימות שממתינות לבחירת ספק.", function (t) { return "יעד " + fmy(C[t.id].fe); });
+    h += block("טרם התקבל עדכון מרפרנט", L.filter(function (t) { return t.status === "noref" && !C[t.id].done; }).sort(byFe), "אין משימות שממתינות לעדכון מרפרנט.", function (t) { return "יעד " + fmy(C[t.id].fe); });
     h += block("צפי חריגה מהתוכנית", L.filter(function (t) { var c = C[t.id]; return c.slip > 0 && !c.done && !c.late; }).sort(byFe), "כל המשימות הפתוחות בתוכנית.", function (t) { var c = C[t.id]; return "תוכנית " + fm(c.be) + " · צפי " + fm(c.fe); });
     if (S.edit) {
       h += block("חסר אחראי ביצוע", L.filter(function (t) { return !t.owner && !C[t.id].done; }), "לכל המשימות הפתוחות מוגדר אחראי.", function (t) { return "יעד " + fmy(C[t.id].fe); });
@@ -397,7 +476,7 @@
       h += fld("owner", "אחראי ביצוע", '<input id="e-owner" list="owners" value="' + esc(t.owner) + '"><datalist id="owners">' + owners().map(function (o) { return '<option value="' + esc(o) + '">'; }).join("") + '</datalist>');
       if (!ch) {
         h += '<div class="f2">' + fld("start", "התחלה (תוכנית)", dateIn('id="e-start"', t.start)) + fld("end", "יעד (תוכנית)", dateIn('id="e-end"', t.end)) + '</div>';
-        h += fld("status", "סטטוס", '<select id="e-status">' + [["todo", "טרם החל"], ["doing", "בביצוע"], ["supplier", "תלוי בבחירת ספק"], ["done", "הושלם"]].map(function (o) { return '<option value="' + o[0] + '"' + (t.status === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") + '</select>');
+        h += fld("status", "סטטוס", '<select id="e-status">' + [["todo", "טרם החל"], ["doing", "בביצוע"], ["supplier", "תלוי בבחירת ספק"], ["noref", "טרם התקבל עדכון מרפרנט"], ["done", "הושלם"]].map(function (o) { return '<option value="' + o[0] + '"' + (t.status === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") + '</select>');
         if (t.status === "done") h += fld("actualEnd", "תאריך סיום בפועל", dateIn('id="e-actualEnd"', t.actualEnd));
         else h += fld("forecastEnd", "צפי סיום מעודכן (רק כשיש חריגה)", dateIn('id="e-forecastEnd"', t.forecastEnd) + '<span class="hint">משימות שתלויות בה יידחו אוטומטית לפי הצפי.</span>');
         h += fld("deps", "תלויה במשימות (WBS, מופרד בפסיקים)", '<input id="e-deps" dir="ltr" value="' + esc((t.deps || []).join(", ")) + '">' + depWarn(t));
@@ -447,6 +526,7 @@
       late: L.filter(function (t) { return C[t.id].late; }).sort(byFe),
       slip: L.filter(function (t) { var c = C[t.id]; return c.slip > 0 && !c.done && !c.late; }).sort(byFe),
       sup: L.filter(function (t) { return t.status === "supplier" && !C[t.id].done; }).sort(byFe),
+      ref: L.filter(function (t) { return t.status === "noref" && !C[t.id].done; }).sort(byFe),
       next: L.filter(function (t) { var c = C[t.id]; return !c.done && c.fe != null && c.fe >= P.n0 && c.fe <= P.n1; }).sort(byFe)
     };
   }
@@ -471,6 +551,7 @@
       '</div><div style="display:flex;flex-direction:column;gap:16px">' +
       listBlock("צפי חריגה מהתוכנית", R.slip, "אין משימות עם צפי חריגה.", slipNote) +
       listBlock("ממתינות לבחירת ספק", R.sup, "אין משימות שממתינות לבחירת ספק.", dueNote) +
+      listBlock("טרם התקבל עדכון מרפרנט", R.ref, "אין משימות שממתינות לעדכון מרפרנט.", dueNote) +
       listBlock(R.P.next, R.next, "אין משימות בטווח זה.", dueNote) + '</div></div>';
     return h;
   }
@@ -480,7 +561,7 @@
     L.push(R.P.label);
     L.push("התקדמות כוללת: " + pc + "% (" + R.doneAll + " מתוך " + R.total + " משימות)");
     function sec(title, arr, fn) { L.push(""); L.push(title + " (" + arr.length + "):"); if (!arr.length) L.push("אין"); arr.forEach(function (t) { L.push("• " + t.id + " " + t.name + " – " + (t.owner || "ללא אחראי") + " – " + fn(t)); }); }
-    sec("הושלמו", R.done, doneNote); sec("מתעכבות", R.late, lateNote); sec("צפי חריגה מהתוכנית", R.slip, slipNote); sec("ממתינות לבחירת ספק", R.sup, dueNote); sec(R.P.next, R.next, dueNote);
+    sec("הושלמו", R.done, doneNote); sec("מתעכבות", R.late, lateNote); sec("צפי חריגה מהתוכנית", R.slip, slipNote); sec("ממתינות לבחירת ספק", R.sup, dueNote); sec("טרם התקבל עדכון מרפרנט", R.ref, dueNote); sec(R.P.next, R.next, dueNote);
     return L.join("\n");
   }
   function copyReport() {
@@ -569,7 +650,7 @@
       var o = a[t.uid || t.id], n = t.id + " " + t.name;
       if (!o) { out.push("נוספה משימה: " + n); return; }
       if (o.id !== t.id) ren++;
-      if (o.status !== t.status) out.push(t.status === "done" ? "הושלמה: " + n : t.status === "doing" ? "בביצוע: " + n : t.status === "supplier" ? "ממתינה לבחירת ספק: " + n : "סטטוס עודכן: " + n);
+      if (o.status !== t.status) out.push(t.status === "done" ? "הושלמה: " + n : t.status === "doing" ? "בביצוע: " + n : t.status === "supplier" ? "ממתינה לבחירת ספק: " + n : t.status === "noref" ? "טרם התקבל עדכון מרפרנט: " + n : "סטטוס עודכן: " + n);
       if (o.end !== t.end || o.start !== t.start) out.push("עודכנו תאריכי התוכנית של " + n + ": " + rg(dn(t.start), dn(t.end)));
       if (o.forecastEnd !== t.forecastEnd && t.forecastEnd) out.push("צפי סיום מעודכן ל-" + n + ": " + fm(dn(t.forecastEnd)));
       if (o.owner !== t.owner) out.push("אחראי ביצוע ל-" + n + ": " + (t.owner || "—"));
@@ -775,7 +856,7 @@
     return new Blob(parts.concat(cd, [e]), { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   }
   var XCOLS = [["id", "WBS"], ["name", "משימה"], ["notes", "הערות"], ["start", "תאריך התחלה"], ["end", "תאריך יעד"], ["deps", "תלות (WBS)"], ["owner", "גורם אחראי"], ["status", "סטטוס ביצוע"], ["forecastEnd", "צפי סיום"], ["actualEnd", "סיום בפועל"], ["critical", "נתיב קריטי"]];
-  var STATUS_HE = { todo: "טרם החל", doing: "בביצוע", supplier: "תלוי בבחירת ספק", done: "הושלם" };
+  var STATUS_HE = { todo: "טרם החל", doing: "בביצוע", supplier: "תלוי בבחירת ספק", noref: "טרם התקבל עדכון מרפרנט", done: "הושלם" };
   function xe(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ""); }
   function colL(i) { var s = ""; i++; while (i) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
   function buildXlsx() {
@@ -875,7 +956,7 @@
     status: ["סטטוס ביצוע", "סטטוס", "מצב"], forecastEnd: ["צפי סיום", "צפי סיום מעודכן"], actualEnd: ["סיום בפועל", "תאריך סיום בפועל"],
     critical: ["נתיב קריטי", "קריטי", "נתיב קריטי לעלייה לאוויר"]
   };
-  var STATUS_IN = { "טרם החל": "todo", "לא התחיל": "todo", "בביצוע": "doing", "תלוי בבחירת ספק": "supplier", "ממתין לספק": "supplier", "הושלם": "done", "בוצע": "done" };
+  var STATUS_IN = { "טרם החל": "todo", "לא התחיל": "todo", "בביצוע": "doing", "תלוי בבחירת ספק": "supplier", "ממתין לספק": "supplier", "טרם התקבל עדכון מרפרנט": "noref", "ממתין לרפרנט": "noref", "ממתין לעדכון מרפרנט": "noref", "הושלם": "done", "בוצע": "done" };
   function normH(s) { return String(s == null ? "" : s).replace(/\s+/g, " ").trim().toLowerCase(); }
   function cellDate(v, fy) { if (v === "" || v == null) return ""; if (typeof v === "number") return v > 20000 && v < 80000 ? ds(Math.round(v) - 25569) : null; return heParse(String(v), fy); }
   function planImport(sheets) {
