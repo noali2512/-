@@ -431,7 +431,8 @@
         '<div class="road-today" style="right:' + pos(TODAY) + '%"><span>היום ' + fm(TODAY) + '</span></div></div></section>';
     }
     // this week / next week
-    h += '<div class="x-2">' + section("done", "מה בוצע השבוע", rg(w0, TODAY) + ' · ' + doneW.length + ' משימות', doneW) +
+    /* weekly sections are placed below critical path, delays and decisions */
+    var weekly = '<div class="x-2">' + section("done", "מה בוצע השבוע", rg(w0, TODAY) + ' · ' + doneW.length + ' משימות', doneW) +
       section("next", "מה מתוכנן לשבוע הבא", rg(n0, n1) + ' · ' + nextW.length + ' משימות', nextW,
         restW.length ? '<div class="note" style="margin-top:8px">ועוד ' + restW.length + ' משימות פתוחות עם יעד עד סוף השבוע הנוכחי.</div>' : '') + '</div>';
     // critical path
@@ -452,6 +453,7 @@
       (late.length ? late.slice(0, 6).map(function (t) { var d = TODAY - C[t.id].fe; return line(t, "יעד " + fmy(C[t.id].fe) + " · " + (d === 1 ? "יום איחור אחד" : d + " ימי איחור") + (t.owner ? " · " + esc(t.owner) : "")); }).join("") + (late.length > 6 ? '<button class="btn sm more" data-show="late">לכל המשימות בעיכוב</button>' : '') : '<div class="note">אין משימות בעיכוב.</div>') + '</div></section>' +
       '<section class="card"><h2>החלטות ואישורים בשבועיים הקרובים <span class="note">(' + dec.length + ')</span></h2><div class="list">' +
       (dec.length ? dec.slice(0, 6).map(function (t) { return line(t, "יעד " + fmy(C[t.id].fe) + (t.owner ? " · " + esc(t.owner) : "")); }).join("") : '<div class="note">אין החלטות פתוחות בשבועיים הקרובים.</div>') + '</div></section></div>';
+    h += weekly;
     // chapters
     h += '<section class="card"><h2>התקדמות לפי תחום</h2><div class="x-sec">' + roots.filter(function (t) { return C[t.id].leaves; }).map(function (t) {
       var c = C[t.id], pc = Math.round(c.pct * 100);
