@@ -284,7 +284,7 @@
         var tid = esc(t.id);
         h += '<span class="nm" style="padding-inline-start:' + (2 + (r.lvl - 1) * 12) + 'px"><input class="ie" data-t="' + tid + '" data-k="name" value="' + esc(t.name) + '" aria-label="שם משימה ' + tid + '"></span>';
         h += '<span><input class="ie' + (!t.owner && !ch ? ' miss' : '') + '" list="owners-all" data-t="' + tid + '" data-k="owner" value="' + esc(t.owner) + '" placeholder="' + (ch ? '' : 'חסר אחראי') + '" aria-label="אחראי ' + tid + '"></span>';
-        if (ch) h += '<span class="dt">' + fm(c.bs) + '</span><span class="dt">' + fm(c.be) + '</span><span>' + bulkSel(t, 'class="ie bulk ' + st[0] + '" data-bulk="' + tid + '" aria-label="סטטוס לכל תתי-המשימות של ' + tid + '"', st[1]) + '</span>';
+        if (ch) h += '<span class="dt">' + fm(c.bs) + '</span><span class="dt">' + fm(c.be) + '</span><span class="st par-st">' + parPills(c) + bulkSel(t, 'class="ie bulk" data-bulk="' + tid + '" title="עדכון סטטוס לכל תתי-המשימות" aria-label="עדכון סטטוס לכל תתי-המשימות של ' + tid + '"', "עדכון") + '</span>';
         else {
           h += '<span>' + dateIn('class="ie" data-t="' + tid + '" data-k="start" aria-label="התחלה ' + tid + '"', t.start) + '</span>';
           h += '<span>' + dateIn('class="ie" data-t="' + tid + '" data-k="end" aria-label="יעד ' + tid + '"', t.end) + '</span>';
@@ -294,7 +294,7 @@
       h += '<span class="nm" style="padding-inline-start:' + (6 + (r.lvl - 1) * 14) + 'px" title="' + esc(t.name) + '">' + esc(t.name) + '</span>';
       h += '<span class="own c-own" title="' + esc(t.owner) + '">' + esc(t.owner) + '</span>';
       h += '<span class="dt c-sd">' + fm(c.fs) + '</span><span class="dt">' + fm(c.fe) + '</span>';
-      h += '<span class="st c-st"><span class="pill ' + st[0] + '">' + st[1] + '</span></span>';
+      h += '<span class="st c-st">' + (ch ? parPills(c) : '<span class="pill ' + st[0] + '">' + st[1] + '</span>') + '</span>';
       }
       h += '</div><div class="tl">';
       if (c.fs != null && c.fe != null) {
@@ -650,6 +650,12 @@
   /* critical-path flag; marking a chapter marks everything under it */
   function setCrit(t, on) {
     DATA.tasks.forEach(function (x) { if (x.id === t.id || x.id.indexOf(t.id + ".") === 0) { if (on) x.critical = true; else delete x.critical; } });
+  }
+  /* parent rows: execution % and schedule (late) shown apart from task status */
+  function parPills(c) {
+    var pc = Math.round(c.pct * 100), cls = c.done ? "p-done" : pc ? "p-doing" : "p-todo";
+    return '<span class="pill ' + cls + '" title="ביצוע: ' + c.doneN + ' מתוך ' + c.leaves + ' תתי-משימות הושלמו">' + (c.done ? "הושלם" : pc + "%") + '</span>' +
+      (c.lateN ? '<span class="pill p-late lt" title="' + (c.lateN === 1 ? "תת-משימה אחת באיחור" : c.lateN + " תתי-משימות באיחור") + '">' + c.lateN + ' באיחור</span>' : '');
   }
   /* one status for every subtask under a parent */
   var ST_OPTS = [["todo", "טרם החל"], ["doing", "בביצוע"], ["supplier", "תלוי בבחירת ספק"], ["noref", "טרם התקבל עדכון מרפרנט"], ["done", "הושלם"]];

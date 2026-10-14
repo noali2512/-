@@ -425,3 +425,16 @@ select.st-noref{color:var(--ref);font-weight:600}
 select.ie.bulk{font-weight:600;border:1px dashed var(--line);border-radius:999px;padding:1px 6px;font-size:11.5px}
 select.ie.bulk.p-done{color:var(--ok)}select.ie.bulk.p-late{color:var(--bad)}select.ie.bulk.p-doing{color:var(--accent)}select.ie.bulk.p-todo{color:var(--muted)}
 select.ie.bulk option,select.ie.bulk optgroup{color:var(--text);font-weight:400}
+/* parent rows: % and lateness side by side, bulk status as a separate control */
+.info{grid-template-columns:28px 50px minmax(0,1fr) 120px 76px 76px 128px}
+:root{--infoW:716px}
+.st{display:flex;gap:4px;align-items:center;flex-wrap:nowrap}
+.st .pill.lt{padding:1px 6px}
+.par-st{gap:3px}
+select.ie.bulk{width:auto;flex:none;border:1px solid var(--line);border-radius:6px;padding:1px 4px;font-size:11px;font-weight:500;color:var(--muted);background:var(--surface)}
+select.ie.bulk:hover{border-color:var(--accent);color:var(--accent)}
+.gantt.editing .info{grid-template-columns:22px 34px 28px 50px minmax(0,1fr) 140px 122px 122px 190px}
+.gantt.editing{--infoW:1012px}
+@media (max-width:900px){.info{grid-template-columns:28px 44px minmax(0,1fr) 78px 104px}:root{--infoW:470px}}
+@media (max-width:560px){.info{grid-template-columns:24px 38px minmax(0,1fr) 70px}:root{--infoW:250px}}
+select.ie.bulk{width:64px!important;max-width:64px;margin-inline-start:auto}
