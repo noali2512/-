@@ -284,7 +284,7 @@
         var tid = esc(t.id);
         h += '<span class="nm" style="padding-inline-start:' + (2 + (r.lvl - 1) * 12) + 'px"><input class="ie" data-t="' + tid + '" data-k="name" value="' + esc(t.name) + '" aria-label="שם משימה ' + tid + '"></span>';
         h += '<span><input class="ie' + (!t.owner && !ch ? ' miss' : '') + '" list="owners-all" data-t="' + tid + '" data-k="owner" value="' + esc(t.owner) + '" placeholder="' + (ch ? '' : 'חסר אחראי') + '" aria-label="אחראי ' + tid + '"></span>';
-        if (ch) h += '<span class="dt">' + fm(c.bs) + '</span><span class="dt">' + fm(c.be) + '</span><span class="st"><span class="pill ' + st[0] + '">' + st[1] + '</span></span>';
+        if (ch) h += '<span class="dt">' + fm(c.bs) + '</span><span class="dt">' + fm(c.be) + '</span><span>' + bulkSel(t, 'class="ie bulk ' + st[0] + '" data-bulk="' + tid + '" aria-label="סטטוס לכל תתי-המשימות של ' + tid + '"', st[1]) + '</span>';
         else {
           h += '<span>' + dateIn('class="ie" data-t="' + tid + '" data-k="start" aria-label="התחלה ' + tid + '"', t.start) + '</span>';
           h += '<span>' + dateIn('class="ie" data-t="' + tid + '" data-k="end" aria-label="יעד ' + tid + '"', t.end) + '</span>';
@@ -516,6 +516,7 @@
         if (c.shift > 0) h += '<div class="warnbox">המשימה נדחתה ב-' + c.shift + ' ימים בגלל עיכוב במשימה שהיא תלויה בה.</div>';
       } else {
         h += '<dl class="kv"><dt>טווח (מחושב)</dt><dd class="dt">' + rg(c.fs, c.fe, fmy) + '</dd><dt>התקדמות</dt><dd>' + Math.round(c.pct * 100) + '% (' + c.doneN + '/' + c.leaves + ')</dd></dl><div class="hint">התאריכים והאחוז של משימת על מחושבים מתתי-המשימות.</div>';
+        h += '<div class="f"><label>סטטוס לכל תתי-המשימות (' + c.leaves + ')</label>' + bulkSel(t, 'data-bulk="' + esc(t.id) + '"', "בחירת סטטוס לעדכון גורף") + '<span class="hint">הסטטוס שייבחר יוחל על כל תתי-המשימות. אחר כך אפשר לשנות כל אחת בנפרד.</span></div>';
       }
       h += fld("notes", "הערות (גלויות ללקוח)", '<textarea id="e-notes">' + esc(t.notes) + '</textarea>');
       h += '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-a="move-up">הזזה למעלה</button><button class="btn sm" data-a="move-down">הזזה למטה</button><button class="btn sm" data-a="add-after">+ משימה מתחת לזו</button><button class="btn sm" data-a="add-child">+ תת-משימה</button><button class="btn sm danger" data-a="delete">מחיקת משימה</button></div>';
@@ -649,6 +650,19 @@
   /* critical-path flag; marking a chapter marks everything under it */
   function setCrit(t, on) {
     DATA.tasks.forEach(function (x) { if (x.id === t.id || x.id.indexOf(t.id + ".") === 0) { if (on) x.critical = true; else delete x.critical; } });
+  }
+  /* one status for every subtask under a parent */
+  var ST_OPTS = [["todo", "טרם החל"], ["doing", "בביצוע"], ["supplier", "תלוי בבחירת ספק"], ["noref", "טרם התקבל עדכון מרפרנט"], ["done", "הושלם"]];
+  function bulkSel(t, attrs, ph) { return '<select ' + attrs + '><option value="" selected>' + esc(ph) + '</option><optgroup label="עדכון לכל תתי-המשימות">' + ST_OPTS.map(function (o) { return '<option value="' + o[0] + '">' + o[1] + '</option>'; }).join("") + '</optgroup></select>'; }
+  function bulkStatus(pid, v) {
+    var subs = DATA.tasks.filter(function (x) { return x.id.indexOf(pid + ".") === 0 && !(kids[x.id] || []).length; }), lbl = (ST_OPTS.filter(function (o) { return o[0] === v; })[0] || [])[1];
+    var chg = subs.filter(function (x) { return x.status !== v; });
+    if (!chg.length) { toast("כל תתי-המשימות כבר בסטטוס " + lbl + "."); rerender(); return; }
+    confirmBox("עדכון סטטוס גורף", "לעדכן ל\"" + lbl + "\" את " + (chg.length === 1 ? "תת-המשימה שאינה בסטטוס הזה" : chg.length + " תתי-המשימות שאינן בסטטוס הזה") + " תחת " + pid + " " + byId[pid].name + "?", "עדכון", function () {
+      chg.forEach(function (x) { x.status = v; if (v === "done") { x.actualEnd = x.actualEnd || TODAY_S; x.forecastEnd = ""; } else x.actualEnd = ""; });
+      touch(); rerender(); toast((chg.length === 1 ? "עודכנה משימה אחת" : "עודכנו " + chg.length + " משימות") + " לסטטוס " + lbl + ".");
+    });
+    setTimeout(function () { var m = document.querySelector(".modal [data-no]"); if (m) m.addEventListener("click", rerender); }, 0);
   }
   function toggleDone(id) {
     var t = byId[id]; if (!t) return;
@@ -1259,6 +1273,7 @@
     if (id === "imp-file") { importFile(e.target.files && e.target.files[0]); return; }
     if (id === "rp-date") { S.rpDate = e.target.value || TODAY_S; rerender(); return; }
     var ds_ = e.target.dataset || {};
+    if (ds_.bulk && byId[ds_.bulk]) { if (e.target.value) bulkStatus(ds_.bulk, e.target.value); return; }
     if (ds_.t && ds_.k && byId[ds_.t]) { inlineEdit(byId[ds_.t], ds_.k, e.target.value); return; }
     if (ds_.pk) { var pv = e.target.value; if (ds_.pk === "goLiveTask") pv = pv.trim(); DATA.project[ds_.pk] = pv; touch(); rerender(); return; }
     if (ds_.mk != null && ds_.mi != null) { var ms = DATA.project.milestones[+ds_.mi]; if (ms) { ms[ds_.mk] = e.target.value; touch(); rerender(); } return; }
